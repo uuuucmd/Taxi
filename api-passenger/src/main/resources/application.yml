@@ -1,0 +1,28 @@
+server:
+  port: 8081
+spring:
+  config:
+    import: optional:file:./.env[.properties],optional:file:../.env[.properties]
+  application:
+    name: api-passenger
+  cloud:
+    nacos:
+      discovery:
+        server-addr: "${NACOS_SERVER_ADDR:localhost:8848}"
+        username: "${NACOS_USERNAME:nacos}"
+        password: "${NACOS_PASSWORD:}"
+  redis:
+    host: "${REDIS_HOST:localhost}"
+    port: "${REDIS_PORT:6379}"
+    database: "${REDIS_DATABASE:0}"
+
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [traceId=%X{traceId:-}] --- [%thread] %logger{36} : %msg%n"
+  level:
+    com.george.apipassenger.remote: DEBUG  # feign 客户端包路径
+    com.alibaba.cloud.nacos.discovery: DEBUG
+    com.alibaba.nacos.client.naming: DEBUG
+    org.springframework.cloud.loadbalancer: DEBUG
+

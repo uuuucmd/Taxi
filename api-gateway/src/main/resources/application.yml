@@ -1,0 +1,35 @@
+server:
+  port: "${GATEWAY_PORT:8080}"
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [traceId=%X{traceId:-}] --- [%thread] %logger{36} : %msg%n"
+
+spring:
+  config:
+    import: optional:file:./.env[.properties],optional:file:../.env[.properties]
+  application:
+    name: api-gateway
+  cloud:
+    nacos:
+      discovery:
+        server-addr: "${NACOS_SERVER_ADDR:localhost:8848}"
+        username: "${NACOS_USERNAME:nacos}"
+        password: "${NACOS_PASSWORD:}"
+    gateway:
+      discovery:
+        locator:
+          enabled: false
+      routes:
+        - id: passenger-api
+          uri: lb://api-passenger
+          predicates:
+            - Path=/passenger/**
+          filters:
+            - StripPrefix=1
+        - id: driver-api
+          uri: lb://api-driver
+          predicates:
+            - Path=/driver/**
+          filters:
+            - StripPrefix=1

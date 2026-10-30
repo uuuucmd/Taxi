@@ -1,0 +1,91 @@
+package com.george.internalCommon.constant;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.Getter;
+
+/**
+ * @Author: George Sun
+ * @Date: 2024-10-13-15:22
+ * @Description: Enums to represent the status of returning values
+ */
+@AllArgsConstructor
+public enum CommonStatus {
+
+    // The response meaning an incorrect verification code, from 1000-1099
+    VERIFICATION_ERROR(1099, "Incorrect Verification Code"),
+
+    // Pairs of codes and messages
+    SUCCESS(1, "success"),
+    FAIL(0, "fail"),
+
+
+    // Token Error, from 1100-1199
+    TOKEN_ERROR(1199, "Wrong Token"),
+
+
+    // User Error, from 1200-1299
+    USER_NOT_EXISTS(1200, "User is not existed"),
+
+    // price rule not exists, from 1300-1399
+    PRICE_RULE_NOT_EXISTS(1300, "Price rules do not exist"),
+    PRICE_RULE_EXISTS(1301, "price rule already exists, no need to add"),
+    PRICE_RULE_NOT_EDIT(1302, "no change in price rule"),
+    PRICE_RULE_CHANGED(1303, "price rule version is not latest"),
+
+
+    // the map returned from Amap is invalid, from 1400-1499
+    MAP_DISTRICT_ERROR(1400, "Request map error"),
+    MAP_DIRECTION_ERROR(1401, "Map direction request failed"),
+    MAP_TRACK_EMPTY(1402, "No track data is available for the requested interval"),
+
+
+    // indicates the relationship between the driver and the vehicle from 1500-1599
+    DRIVER_CAR_BIND_NOT_EXISTS(1500, "Binding relationship between driver and vehicle does not exist"),
+
+    DRIVER_CAR_BIND_EXISTS(1502,
+            "Binding relationship between driver and vehicle has already existed, please don't rebind"),
+
+    // if the driver does not exist in dataset
+    DRIVER_NOT_EXISTS(1501, "Driver does not exist"),
+    DRIVER_BIND_EXISTS(1503,
+            "Driver has already been bound, please don't rebind"),
+    CAR_BIND_EXISTS(1504,
+            "Car has already been bound, please don't rebind"),
+    CITY_NO_DRIVER(1505, "Current city has no driver"),
+
+    NO_AVAILABLE_DRIVER(1506,"No driver is available"),
+
+
+    /**
+     * Order messages: from 1600-1699
+     */
+    ORDER_GOING_ON(1600, "Order has been ongoing"),
+    DEVICE_IS_BLACK(1601, "Device is in black list"),
+    // when there is no vehicle registered in current area
+    SERVICE_NOT_PROVIDED(1602, "Service is unavailable in current city"),
+    ORDER_CANCEL_ERROR(1603, "Order has been canceled unsuccessfully"),
+    DISPATCH_FAILED(1604, "No driver could be assigned to the order"),
+    FINALIZATION_FAILED(1605, "Order finalization failed after maximum attempts"),
+    FINALIZATION_RETRY_SCHEDULED(1606, "Order finalization is pending retry"),
+    ORDER_NOT_FOUND(1607, "Order does not exist"),
+    ORDER_FINALIZATION_NOT_ALLOWED(1608, "Order cannot be finalized from its current state"),
+    FINALIZATION_RECOVERY_SCHEDULED(1609, "Failed order finalization recovery is scheduled"),
+    ORDER_STATE_TRANSITION_NOT_ALLOWED(1610, "Order state transition is not allowed"),
+    FINALIZATION_IN_PROGRESS(1611, "Order is being finalized and cannot be modified"),
+    ORDER_UNPAID(1612, "您还有未支付的订单，请先支付后再继续下单"),
+    ORDER_CREATE_BUSY(1613, "订单正在处理中，请稍后重试"),
+    ORDER_IDEMPOTENCY_CONFLICT(1614, "幂等键已用于不同的订单内容"),
+    ORDER_IDEMPOTENCY_KEY_INVALID(1615, "下单幂等键无效"),
+
+    // downstream or integration response errors, from 1700-1799
+    DOWNSTREAM_RESPONSE_ERROR(1700, "Downstream service returned an invalid response"),
+
+    ;
+
+    @Getter
+    private int code;
+    @Getter
+    private String message;
+
+}

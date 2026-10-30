@@ -1,0 +1,103 @@
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Java build
+target/
+*.class
+*.jar
+*.war
+
+# Logs and runtime state
+*.log
+*.log.*
+logs/
+**/logs/
+*.pid
+*.tmp
+*.temp
+.run/
+
+# Datasets and database files
+data/
+dataset/
+datasets/
+**/data/
+**/dataset/
+**/datasets/
+*.csv
+*.tsv
+*.xls
+*.xlsx
+*.parquet
+*.avro
+*.jsonl
+*.ndjson
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.bak
+*.data
+*.dat
+*.npy
+*.npz
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+*.feather
+*.orc
+
+# Test code
+**/src/test/
+**/test/
+**/tests/
+**/__tests__/
+**/*Test.java
+**/*Tests.java
+**/*IT.java
+**/*TestCase.java
+**/*.test.*
+**/*.spec.*
+**/*-test.html
+**/*Test.html
+jmeter/
+scripts/Generate-JMeterPassengerData.ps1
+
+# Test data and generated test artifacts
+**/src/test/resources/
+**/test-data/
+**/testdata/
+**/test-resources/
+**/fixtures/
+**/__fixtures__/
+**/__snapshots__/
+**/target/surefire-reports/
+**/target/failsafe-reports/
+**/test-results/
+**/coverage/
+**/jacoco/
+*.jtl
+*.har
+
+# Environment and local tooling resources
+.env
+.env.*
+!.env.example
+*.env.local
+**/*.local.yml
+**/*.local.yaml
+**/*.local.properties
+.tools/
+.vscode/
+
+# Frontend dependencies and build output
+**/node_modules/
+**/dist/

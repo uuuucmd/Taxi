@@ -1,0 +1,25 @@
+package com.george.internalCommon.trace;
+
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import javax.servlet.FilterChain;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+
+public class TraceIdFilter extends OncePerRequestFilter {
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
+                                    FilterChain filterChain) throws ServletException, IOException {
+        String traceId = TraceIdContext.resolve(request.getHeader(TraceIdContext.HEADER_NAME));
+        TraceIdContext.set(traceId);
+        response.setHeader(TraceIdContext.HEADER_NAME, traceId);
+        try {
+            filterChain.doFilter(request, response);
+        } finally {
+            TraceIdContext.clear();
+        }
+    }
+}

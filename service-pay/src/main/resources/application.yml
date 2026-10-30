@@ -1,0 +1,28 @@
+server:
+  port: 9001
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [traceId=%X{traceId:-}] --- [%thread] %logger{36} : %msg%n"
+
+alipay:
+  appId: "${ALIPAY_APP_ID:}"
+  appPrivateKey: "${ALIPAY_APP_PRIVATE_KEY:}"
+  publicKey: "${ALIPAY_PUBLIC_KEY:}"
+  notifyUrl: "${ALIPAY_NOTIFY_URL:}"
+  protocol: "${ALIPAY_PROTOCOL:https}"
+  gatewayHost: "${ALIPAY_GATEWAY_HOST:openapi-sandbox.dl.alipaydev.com}"
+  signType: "${ALIPAY_SIGN_TYPE:RSA2}"
+
+
+spring:
+  config:
+    import: optional:file:./.env[.properties],optional:file:../.env[.properties]
+  cloud:
+    nacos:
+      discovery:
+        server-addr: "${NACOS_SERVER_ADDR:localhost:8848}"
+        username: "${NACOS_USERNAME:nacos}"
+        password: "${NACOS_PASSWORD:}"
+  application:
+    name: service-pay

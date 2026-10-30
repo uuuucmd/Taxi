@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.george.servicedriveruser.mapper.DriverUserMapper">
+    <select id="selectDriverUserCountByCityCode" parameterType="java.lang.String" resultType="java.lang.Integer">
+        select count(distinct d.id)
+        from driver_user d
+        join driver_user_work_status ws on ws.driver_id = d.id
+        join driver_car_binding_relationship r on r.driver_id = d.id
+        join car c on c.id = r.car_id
+        where c.address = #{cityCode}
+          and ws.work_status = 1
+          and r.bind_state = 1
+          and d.state = 1
+          and c.state = 0
+    </select>
+</mapper>

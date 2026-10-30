@@ -1,0 +1,30 @@
+spring:
+  config:
+    import: optional:file:./.env[.properties],optional:file:../.env[.properties]
+  application:
+    name: service-map
+  redis:
+    host: "${REDIS_HOST:localhost}"
+    port: "${REDIS_PORT:6379}"
+    database: "${REDIS_DATABASE:0}"
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: "${SERVICE_MAP_DB_URL:jdbc:mysql://localhost:3306/service-map?characterEncoding=utf-8&serverTimezone=GMT%2B8}"
+    username: "${SERVICE_MAP_DB_USERNAME:${DB_USERNAME:root}}"
+    password: "${SERVICE_MAP_DB_PASSWORD:${DB_PASSWORD:}}"
+  cloud:
+    nacos:
+      discovery:
+        server-addr: "${NACOS_SERVER_ADDR:localhost:8848}"
+        username: "${NACOS_USERNAME:nacos}"
+        password: "${NACOS_PASSWORD:}"
+server:
+  port: 8085
+
+amap:
+  key: "${AMAP_KEY:}"
+  sid: "${AMAP_SID:}"
+
+taxi:
+  local-simulation: "${LOCAL_SIMULATION:true}"
+  location-ttl-seconds: "${LOCAL_LOCATION_TTL_SECONDS:1800}"

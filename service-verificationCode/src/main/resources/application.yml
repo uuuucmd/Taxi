@@ -1,0 +1,15 @@
+server:
+  port: 8082
+
+spring:
+  config:
+    import: optional:file:./.env[.properties],optional:file:../.env[.properties]
+  cloud:
+    nacos:
+      discovery:
+        password: "${NACOS_PASSWORD:}"
+        username: "${NACOS_USERNAME:nacos}"
+        server-addr: "${NACOS_SERVER_ADDR:localhost:8848}"
+
+  application:
+    name: service-verificationCode
