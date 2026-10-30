@@ -1,6 +1,6 @@
 # FlyTaxi — Microservices Ride-Hailing Platform
 
-[![CI - Run Unit Tests](https://github.com/Ninika369/Fly_Taxi/actions/workflows/ci.yml/badge.svg)](https://github.com/Ninika369/Fly_Taxi/actions/workflows/ci.yml)
+[![CI - Run Unit Tests](https://github.com/uuuucmd/Taxi/actions/workflows/ci.yml/badge.svg)](https://github.com/uuuucmd/Taxi/actions/workflows/ci.yml)
 
 A backend ride-hailing platform built with **Java 8 / Spring Boot 2.4.13 / Spring Cloud 2020.0.1** microservices. It implements driver dispatch and order-state workflows, versioned fare rules, SSE-based status delivery, and an Alipay sandbox adapter. The repository contains backend services; the passenger, driver, and admin clients are not included.
 
@@ -281,24 +281,24 @@ password: ${DB_PASSWORD:}
 
 ## If you're reviewing the code, start here
 
-- [`PredictPriceService.java`](service-price/src/main/java/com/george/serviceprice/service/PredictPriceService.java) — core pricing logic with BigDecimal precision fix
-- [`PredictPriceServiceTest.java`](service-price/src/test/java/com/george/serviceprice/service/PredictPriceServiceTest.java) — 18 tests including rounding boundary, input validation, cross-hour duration, and regression tests
-- [`OrderInfoSerializationTest.java`](internal-common/src/test/java/com/george/internalCommon/dto/OrderInfoSerializationTest.java) — 1 test covering client-facing JSON exclusion for internal order-finalization recovery metadata
-- [`OrderInfoServiceTest.java`](service-order/src/test/java/com/george/serviceorder/service/OrderInfoServiceTest.java) — 79 tests covering cancellation state machine, explicit finalization-state fencing for legacy lifecycle/payment/cancel writers, cancellation predecessor-state CAS and finalization-race reread handling, predecessor-state CAS and CAS-miss reread behavior, audited timestamp preservation for wrapper-based transitions, passenger and driver fixed-Clock cancellation boundaries at 59/60/119/120 seconds, durable passenger get-off finalization, bounded retry, completion-time retry backoff, terminal CAS transitions, expired max-attempt lease handling, controlled failed-finalization recovery including legacy failed rows after retry-limit configuration changes, finalization numeric guards, finalization lease/deadline policy validation, dedicated finalization client isolation, READ-02 SQL/benchmark and ADR guardrails, null-retry-time due-scan consistency, sanitized dependency exception handling, idempotent completed-order handling, fixed trace-search end time, invalid candidate handling, exhausted dispatch semantics, track-search failure propagation, pre-insert downstream failure propagation, and dispatch lock safety with Mockito
-- [`OrderFinalizationRetryJobTest.java`](service-order/src/test/java/com/george/serviceorder/job/OrderFinalizationRetryJobTest.java) — 1 test covering scheduled finalization recovery isolation when one retry fails with a truly unexpected exception
-- [`ServicePriceClientContractTest.java`](service-order/src/test/java/com/george/serviceorder/remote/ServicePriceClientContractTest.java) — 4 tests covering price-rule and actual-price OpenFeign contracts with WireMock
-- [`ServiceMapClientContractTest.java`](service-order/src/test/java/com/george/serviceorder/remote/ServiceMapClientContractTest.java) — 1 test covering the trace-search OpenFeign contract with WireMock
-- [`ServiceDriverUserClientContractTest.java`](service-order/src/test/java/com/george/serviceorder/remote/ServiceDriverUserClientContractTest.java) — 1 test covering the available-driver OpenFeign contract with WireMock
-- [`FinalizationFeignClientContractTest.java`](service-order/src/test/java/com/george/serviceorder/remote/FinalizationFeignClientContractTest.java) — 7 tests covering dedicated finalization OpenFeign context IDs, copied shared-client method contracts, timeout property-shape isolation, and driver/map/price WireMock requests
-- [`PassengerPredictPriceServiceTest.java`](api-passenger/src/test/java/com/george/apipassenger/service/PassengerPredictPriceServiceTest.java) — 1 test covering passenger-edge downstream failure propagation
-- [`PredictPriceFlowServiceTest.java`](service-price/src/test/java/com/george/serviceprice/service/PredictPriceFlowServiceTest.java) — 1 test covering map-service failure propagation before price-rule lookup
-- [`MapServiceClientTest.java`](service-map/src/test/java/com/george/servicemap/remote/MapServiceClientTest.java) — 1 test covering Amap direction parse failure surfacing
-- [`DirectionServiceTest.java`](service-map/src/test/java/com/george/servicemap/service/DirectionServiceTest.java) — 1 test covering map adapter failure translation
-- [`DictDistrictServiceTest.java`](service-map/src/test/java/com/george/servicemap/service/DictDistrictServiceTest.java) — 1 test covering Amap district status failure handling
-- [`TerminalClientTest.java`](service-map/src/test/java/com/george/servicemap/remote/TerminalClientTest.java) — 9 tests covering Amap track duration conversion from milliseconds to seconds, fractional-segment aggregation before truncation, positive-count empty-track domain failure, and malformed, negative, or overflowing provider values
+- [`PredictPriceService.java`](service-price/src/main/java/com/flytaxi/serviceprice/service/PredictPriceService.java) — core pricing logic with BigDecimal precision fix
+- [`PredictPriceServiceTest.java`](service-price/src/test/java/com/flytaxi/serviceprice/service/PredictPriceServiceTest.java) — 18 tests including rounding boundary, input validation, cross-hour duration, and regression tests
+- [`OrderInfoSerializationTest.java`](internal-common/src/test/java/com/flytaxi/internalCommon/dto/OrderInfoSerializationTest.java) — 1 test covering client-facing JSON exclusion for internal order-finalization recovery metadata
+- [`OrderInfoServiceTest.java`](service-order/src/test/java/com/flytaxi/serviceorder/service/OrderInfoServiceTest.java) — 79 tests covering cancellation state machine, explicit finalization-state fencing for legacy lifecycle/payment/cancel writers, cancellation predecessor-state CAS and finalization-race reread handling, predecessor-state CAS and CAS-miss reread behavior, audited timestamp preservation for wrapper-based transitions, passenger and driver fixed-Clock cancellation boundaries at 59/60/119/120 seconds, durable passenger get-off finalization, bounded retry, completion-time retry backoff, terminal CAS transitions, expired max-attempt lease handling, controlled failed-finalization recovery including legacy failed rows after retry-limit configuration changes, finalization numeric guards, finalization lease/deadline policy validation, dedicated finalization client isolation, READ-02 SQL/benchmark and ADR guardrails, null-retry-time due-scan consistency, sanitized dependency exception handling, idempotent completed-order handling, fixed trace-search end time, invalid candidate handling, exhausted dispatch semantics, track-search failure propagation, pre-insert downstream failure propagation, and dispatch lock safety with Mockito
+- [`OrderFinalizationRetryJobTest.java`](service-order/src/test/java/com/flytaxi/serviceorder/job/OrderFinalizationRetryJobTest.java) — 1 test covering scheduled finalization recovery isolation when one retry fails with a truly unexpected exception
+- [`ServicePriceClientContractTest.java`](service-order/src/test/java/com/flytaxi/serviceorder/remote/ServicePriceClientContractTest.java) — 4 tests covering price-rule and actual-price OpenFeign contracts with WireMock
+- [`ServiceMapClientContractTest.java`](service-order/src/test/java/com/flytaxi/serviceorder/remote/ServiceMapClientContractTest.java) — 1 test covering the trace-search OpenFeign contract with WireMock
+- [`ServiceDriverUserClientContractTest.java`](service-order/src/test/java/com/flytaxi/serviceorder/remote/ServiceDriverUserClientContractTest.java) — 1 test covering the available-driver OpenFeign contract with WireMock
+- [`FinalizationFeignClientContractTest.java`](service-order/src/test/java/com/flytaxi/serviceorder/remote/FinalizationFeignClientContractTest.java) — 7 tests covering dedicated finalization OpenFeign context IDs, copied shared-client method contracts, timeout property-shape isolation, and driver/map/price WireMock requests
+- [`PassengerPredictPriceServiceTest.java`](api-passenger/src/test/java/com/flytaxi/apipassenger/service/PassengerPredictPriceServiceTest.java) — 1 test covering passenger-edge downstream failure propagation
+- [`PredictPriceFlowServiceTest.java`](service-price/src/test/java/com/flytaxi/serviceprice/service/PredictPriceFlowServiceTest.java) — 1 test covering map-service failure propagation before price-rule lookup
+- [`MapServiceClientTest.java`](service-map/src/test/java/com/flytaxi/servicemap/remote/MapServiceClientTest.java) — 1 test covering Amap direction parse failure surfacing
+- [`DirectionServiceTest.java`](service-map/src/test/java/com/flytaxi/servicemap/service/DirectionServiceTest.java) — 1 test covering map adapter failure translation
+- [`DictDistrictServiceTest.java`](service-map/src/test/java/com/flytaxi/servicemap/service/DictDistrictServiceTest.java) — 1 test covering Amap district status failure handling
+- [`TerminalClientTest.java`](service-map/src/test/java/com/flytaxi/servicemap/remote/TerminalClientTest.java) — 9 tests covering Amap track duration conversion from milliseconds to seconds, fractional-segment aggregation before truncation, positive-count empty-track domain failure, and malformed, negative, or overflowing provider values
 - [`docs/adr/0004-finalization-recovery-policy-and-deadline.md`](docs/adr/0004-finalization-recovery-policy-and-deadline.md) — controlled failed-finalization recovery and lease/deadline policy
 - [`database/README.md`](database/README.md) — database change-management and runtime bootstrap boundaries
-- [`service-sse-push/src/main/java/com/george/servicessepush/controller/SseController.java`](service-sse-push/src/main/java/com/george/servicessepush/controller/SseController.java) — current client-facing SSE connection, push relay, and known trust/lifecycle gaps
+- [`service-sse-push/src/main/java/com/flytaxi/servicessepush/controller/SseController.java`](service-sse-push/src/main/java/com/flytaxi/servicessepush/controller/SseController.java) — current client-facing SSE connection, push relay, and known trust/lifecycle gaps
 - [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — CI pipeline configuration
 
 ---
@@ -316,8 +316,8 @@ password: ${DB_PASSWORD:}
 
 ```bash
 # Clone the repository
-git clone https://github.com/Ninika369/Fly_Taxi.git
-cd Fly_Taxi
+git clone https://github.com/uuuucmd/Taxi.git
+cd Taxi
 
 # Build all modules
 mvn clean install -DskipTests

@@ -184,16 +184,16 @@ Such a split must include an explicit migration and consistency design. It must 
 This decision was based on the following repository paths:
 
 - `service-order/src/main/resources/application.yml`
-- `service-order/src/main/java/com/george/serviceorder/controller/OrderInfoController.java`
-- `service-order/src/main/java/com/george/serviceorder/service/OrderInfoService.java`
+- `service-order/src/main/java/com/flytaxi/serviceorder/controller/OrderInfoController.java`
+- `service-order/src/main/java/com/flytaxi/serviceorder/service/OrderInfoService.java`
 - `service-pay/pom.xml`
 - `service-pay/src/main/resources/application.yml`
-- `service-pay/src/main/java/com/george/servicepay/controller/AlipayController.java`
-- `service-pay/src/main/java/com/george/servicepay/service/AlipayService.java`
-- `service-pay/src/main/java/com/george/servicepay/remote/ServiceOrderClient.java`
-- `api-driver/src/main/java/com/george/apidriver/controller/PayController.java`
-- `api-driver/src/main/java/com/george/apidriver/service/PayService.java`
-- `internal-common/src/main/java/com/george/internalCommon/dto/OrderInfo.java`
-- `internal-common/src/main/java/com/george/internalCommon/constant/OrderConstant.java`
+- `service-pay/src/main/java/com/flytaxi/servicepay/controller/AlipayController.java`
+- `service-pay/src/main/java/com/flytaxi/servicepay/service/AlipayService.java`
+- `service-pay/src/main/java/com/flytaxi/servicepay/remote/ServiceOrderClient.java`
+- `api-driver/src/main/java/com/flytaxi/apidriver/controller/PayController.java`
+- `api-driver/src/main/java/com/flytaxi/apidriver/service/PayService.java`
+- `internal-common/src/main/java/com/flytaxi/internalCommon/dto/OrderInfo.java`
+- `internal-common/src/main/java/com/flytaxi/internalCommon/constant/OrderConstant.java`
 
 Material changes to this accepted decision should be recorded in a new ADR that supersedes this one rather than silently rewriting its ownership boundary.

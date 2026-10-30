@@ -1,0 +1,28 @@
+package com.flytaxi.servicedriveruser.remote;
+
+
+import com.flytaxi.internalCommon.dto.ResponseResult;
+import com.flytaxi.internalCommon.response.TerminalResponse;
+import com.flytaxi.internalCommon.response.TrackResponse;
+import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
+
+import java.util.Map;
+
+/**
+ * This class is used to connect with the map service to add terminal or track in Amap
+ */
+@FeignClient("service-map")
+public interface ServiceMapClient {
+
+    @RequestMapping(method = RequestMethod.GET, value = "/locations/city-code")
+    ResponseResult<Map<String, String>> cityCode(@RequestParam String address);
+
+    @RequestMapping(method = RequestMethod.POST, value = "/terminal/add")
+    ResponseResult<TerminalResponse> addTerminal(@RequestParam String name , @RequestParam String desc);
+
+    @RequestMapping(method = RequestMethod.POST, value = "/track/add")
+    ResponseResult<TrackResponse> addTrack(@RequestParam String tid);
+}

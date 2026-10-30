@@ -329,25 +329,25 @@ This rule supports later Maven dependency-analysis checks and prevents
 New modules start with clean, all-lowercase Java package names:
 
 ```text
-com.george.securitysupport.core
-com.george.securitysupport.session
+com.flytaxi.securitysupport.core
+com.flytaxi.securitysupport.session
 ```
 
 Expected package families include:
 
 ```text
-com.george.securitysupport.core.model
-com.george.securitysupport.core.error
-com.george.securitysupport.core.token
-com.george.securitysupport.core.verification
+com.flytaxi.securitysupport.core.model
+com.flytaxi.securitysupport.core.error
+com.flytaxi.securitysupport.core.token
+com.flytaxi.securitysupport.core.verification
 
-com.george.securitysupport.session.session
-com.george.securitysupport.session.redis
-com.george.securitysupport.session.web
-com.george.securitysupport.session.resolver
+com.flytaxi.securitysupport.session.session
+com.flytaxi.securitysupport.session.redis
+com.flytaxi.securitysupport.session.web
+com.flytaxi.securitysupport.session.resolver
 ```
 
-The legacy camel-case package style represented by `com.george.internalCommon`
+The legacy camel-case package style represented by `com.flytaxi.internalCommon`
 must not be copied into new modules.
 
 Package families may be adjusted within the two modules as implementation
@@ -657,13 +657,13 @@ This decision was based on the following repository areas:
 - `pom.xml`
 - `README.md`
 - `api-passenger/pom.xml`
-- `api-passenger/src/main/java/com/george/apipassenger/interceptor/`
-- `api-passenger/src/main/java/com/george/apipassenger/service/`
-- `api-passenger/src/main/java/com/george/apipassenger/remote/serviceVerificationCodeClient.java`
+- `api-passenger/src/main/java/com/flytaxi/apipassenger/interceptor/`
+- `api-passenger/src/main/java/com/flytaxi/apipassenger/service/`
+- `api-passenger/src/main/java/com/flytaxi/apipassenger/remote/serviceVerificationCodeClient.java`
 - `api-driver/pom.xml`
-- `api-driver/src/main/java/com/george/apidriver/interceptor/`
-- `api-driver/src/main/java/com/george/apidriver/service/`
-- `api-driver/src/main/java/com/george/apidriver/remote/ServiceVerificationcodeClient.java`
+- `api-driver/src/main/java/com/flytaxi/apidriver/interceptor/`
+- `api-driver/src/main/java/com/flytaxi/apidriver/service/`
+- `api-driver/src/main/java/com/flytaxi/apidriver/remote/ServiceVerificationcodeClient.java`
 - `api-boss/pom.xml`
 - `service-sse-push/pom.xml`
 - `service-order/pom.xml`
@@ -674,7 +674,7 @@ This decision was based on the following repository areas:
 - `service-passenger-user/pom.xml`
 - `service-verificationCode/pom.xml`
 - `service-verificationCode/src/main/resources/application.yml`
-- `service-verificationCode/src/main/java/com/george/serviceverificationcode/ServiceVerificationCodeApplication.java`
-- `service-verificationCode/src/main/java/com/george/serviceverificationcode/controller/NumberCodeController.java`
+- `service-verificationCode/src/main/java/com/flytaxi/serviceverificationcode/ServiceVerificationCodeApplication.java`
+- `service-verificationCode/src/main/java/com/flytaxi/serviceverificationcode/controller/NumberCodeController.java`
 - `internal-common/pom.xml`
 - `docs/adr/0001-payment-state-ownership.md`

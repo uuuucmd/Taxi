@@ -1,0 +1,205 @@
+package com.flytaxi.serviceprice.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.flytaxi.internalCommon.constant.CommonStatus;
+import com.flytaxi.internalCommon.dto.PriceRule;
+import com.flytaxi.internalCommon.dto.ResponseResult;
+import com.flytaxi.internalCommon.request.PredictPriceDTO;
+import com.flytaxi.internalCommon.response.DirectionResponse;
+import com.flytaxi.internalCommon.response.PredictPriceResponse;
+import com.flytaxi.internalCommon.util.BigDecimalUtils;
+import com.flytaxi.serviceprice.mapper.PriceRuleMapper;
+import com.flytaxi.serviceprice.remote.ServiceMapClient;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * @Date: 2024-10-24-15:28
+ * @Description: This class is to predict the price of a single ride
+ */
+@Service
+@Slf4j
+public class PredictPriceService {
+
+    // connect with map
+    @Autowired
+    private ServiceMapClient client;
+
+    // connect with dataset
+    @Autowired
+    private PriceRuleMapper mapper;
+
+
+    /**
+     * This function is to predict the price of a single ride based on the longitude and latitude
+     * of origin and destination.
+     * @param depLatitude - the latitude of origin
+     * @param depLongitude - the longitude of origin
+     * @param destLatitude - the latitude of destination
+     * @param destLongitude - the longitude of destination
+     * @return
+     */
+    public ResponseResult predictPrice(String depLatitude, String depLongitude,
+                                       String destLatitude, String destLongitude,
+                                       String cityCode, String vehicleType) {
+        cityCode = normalizeCityCode(cityCode);
+
+        // assemble all the parameter into a single object
+        PredictPriceDTO priceDTO = new PredictPriceDTO();
+        priceDTO.setDepLatitude(depLatitude);
+        priceDTO.setDepLongitude(depLongitude);
+        priceDTO.setDestLatitude(destLatitude);
+        priceDTO.setDestLongitude(destLongitude);
+
+        // call map function to get distance and time
+        ResponseResult<DirectionResponse> directionResponse = client.direction(priceDTO);
+        if (directionResponse == null) {
+            return ResponseResult.fail(CommonStatus.DOWNSTREAM_RESPONSE_ERROR.getCode(),
+                    CommonStatus.DOWNSTREAM_RESPONSE_ERROR.getMessage());
+        }
+        if (directionResponse.getCode() != CommonStatus.SUCCESS.getCode()) {
+            return ResponseResult.fail(directionResponse.getCode(), directionResponse.getMessage());
+        }
+        DirectionResponse directionData = directionResponse.getData();
+        if (directionData == null || directionData.getDistance() == null || directionData.getDuration() == null) {
+            return ResponseResult.fail(CommonStatus.DOWNSTREAM_RESPONSE_ERROR.getCode(),
+                    CommonStatus.DOWNSTREAM_RESPONSE_ERROR.getMessage());
+        }
+        Integer distance = directionData.getDistance();
+        Integer duration = directionData.getDuration();
+
+        // load calculation rules
+        QueryWrapper queryWrapper = new QueryWrapper();
+        queryWrapper.eq("city_code", cityCode);
+        queryWrapper.eq("vehicle_type", vehicleType);
+        queryWrapper.orderByDesc("fare_version");
+
+        List<PriceRule> priceRules = mapper.selectList(queryWrapper);
+        if (priceRules.isEmpty()) {
+            return ResponseResult.fail(CommonStatus.PRICE_RULE_NOT_EXISTS.getCode(),
+                                        CommonStatus.PRICE_RULE_NOT_EXISTS.getMessage());
+        }
+        PriceRule rule = priceRules.get(0);
+
+        // calculate the predicted price
+        double price = calculatePrice(distance, duration, rule);
+        PredictPriceResponse predictPriceResponse = new PredictPriceResponse();
+        predictPriceResponse.setPrice(price);
+        predictPriceResponse.setCityCode(cityCode);
+        predictPriceResponse.setVehicleType(vehicleType);
+        predictPriceResponse.setFareType(rule.getFareType());
+        predictPriceResponse.setFareVersion(rule.getFareVersion());
+
+        return ResponseResult.success(predictPriceResponse);
+    }
+
+    /**
+     * This function is used to get the actual price
+     * @param distance
+     * @param duration
+     * @param cityCode
+     * @param vehicleType
+     * @return
+     */
+    public ResponseResult<Double> getPrice( Integer distance ,  Integer duration, String cityCode, String vehicleType){
+        cityCode = normalizeCityCode(cityCode);
+        // Query pricing rules
+        QueryWrapper queryWrapper = new QueryWrapper();
+        queryWrapper.eq("city_code",cityCode);
+        queryWrapper.eq("vehicle_type",vehicleType);
+        queryWrapper.orderByDesc("fare_version");
+
+        List<PriceRule> priceRules = mapper.selectList(queryWrapper);
+        if (priceRules.size() == 0){
+            return ResponseResult.fail(CommonStatus.PRICE_RULE_NOT_EXISTS.getCode(),
+                    CommonStatus.PRICE_RULE_NOT_EXISTS.getMessage());
+        }
+
+        PriceRule priceRule = priceRules.get(0);
+
+        double price = calculatePrice(distance, duration, priceRule);
+        return ResponseResult.success(price);
+    }
+
+
+    /**
+     * This function is aimed to calculate the predicted price according to input parameters.
+     * @param distance - distance of the ride
+     * @param duration - the time spent on the ride
+     * @param rule - the rules stipulating how to calculate the price
+     * @return
+     */
+    private String normalizeCityCode(String cityCode) {
+        if (cityCode == null) {
+            return null;
+        }
+        String normalized = cityCode.trim();
+        if (normalized.length() == 6 && normalized.chars().allMatch(Character::isDigit)) {
+            String citySuffix = new String(new char[]{48, 48});
+            boolean municipality = (normalized.charAt(0) == 49 && normalized.charAt(1) == 49)
+                    || (normalized.charAt(0) == 49 && normalized.charAt(1) == 50)
+                    || (normalized.charAt(0) == 51 && normalized.charAt(1) == 49)
+                    || (normalized.charAt(0) == 53 && normalized.charAt(1) == 48);
+            if (municipality) {
+                return normalized.substring(0, 2) + citySuffix + citySuffix;
+            }
+            return normalized.substring(0, 4) + citySuffix;
+        }
+        return normalized;
+    }
+
+    public double calculatePrice(Integer distance, Integer duration, PriceRule rule) {
+       if (distance == null) {
+           throw new IllegalArgumentException("distance must not be null");
+       }
+       if (duration == null) {
+           throw new IllegalArgumentException("duration must not be null");
+       }
+       if (rule == null) {
+           throw new IllegalArgumentException("price rule must not be null");
+       }
+       if (distance < 0) {
+           throw new IllegalArgumentException("distance must be non-negative");
+       }
+       if (duration < 0) {
+           throw new IllegalArgumentException("duration must be non-negative");
+       }
+
+       double result = 0.0;
+
+       // get the starting fare
+       double startFare = rule.getStartFare();
+       result = BigDecimalUtils.add(result, startFare);
+
+       // get the miles fare
+       // total miles in km
+       double distanceMiles = BigDecimalUtils.divide(distance, 1000);
+       double startMile = rule.getStartMile();
+       // the miles need to be charged additionally
+       double mileDiff = BigDecimalUtils.subtract(distanceMiles, startMile);
+       // charge the extra fee only if needed
+       double tollMiles = mileDiff < 0 ? 0 : mileDiff;
+       double unitPricePerMile = rule.getUnitPricePerMile();
+       double mileFare = BigDecimalUtils.multiply(tollMiles, unitPricePerMile);
+       // add the extra mile charges to the total cost
+       result = BigDecimalUtils.add(result, mileFare);
+
+
+       // get duration fare
+       double timeInMinutes = BigDecimalUtils.divide(duration, 60);
+       double unitPricePerMinute = rule.getUnitPricePerMinute();
+       double timeFare = BigDecimalUtils.multiply(timeInMinutes, unitPricePerMinute);
+       result = BigDecimalUtils.add(timeFare, result);
+       BigDecimal res = BigDecimal.valueOf(result);
+       res = res.setScale(2, BigDecimal.ROUND_HALF_UP);
+
+       return res.doubleValue();
+   }
+
+}

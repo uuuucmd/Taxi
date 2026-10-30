@@ -5,7 +5,7 @@ Vue 3 + Vite frontend for the local FlyTaxi backend services.
 ## Run
 
 ```powershell
-cd E:\java\Fly_Taxi-master\frontend
+cd <path-to-repository>\frontend
 npm install
 npm run dev -- --host 0.0.0.0
 ```

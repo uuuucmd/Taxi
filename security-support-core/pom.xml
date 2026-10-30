@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>com.george</groupId>
+        <groupId>com.flytaxi</groupId>
         <artifactId>FlyTaxi</artifactId>
         <version>1.0-SNAPSHOT</version>
     </parent>
@@ -37,7 +37,7 @@
                         <configuration>
                             <classifier>tests</classifier>
                             <includes>
-                                <include>com/george/securitysupport/core/testfixture/**</include>
+                                <include>com/flytaxi/securitysupport/core/testfixture/**</include>
                             </includes>
                         </configuration>
                     </execution>

@@ -26,7 +26,7 @@ function Import-DotEnv {
 Import-DotEnv (Join-Path $ProjectRoot '.env')
 
 $JavaHome = [Environment]::GetEnvironmentVariable('JAVA_HOME', 'User')
-if (-not $JavaHome) { $JavaHome = 'E:\java\Fly_Taxi-master\.tools\jdk-17.0.20.1+1' }
+if (-not $JavaHome) { $JavaHome = Join-Path $ProjectRoot '.tools\jdk-17.0.20.1+1' }
 
 $MavenHome = [Environment]::GetEnvironmentVariable('MAVEN_HOME', 'User')
 if (-not $MavenHome) { $MavenHome = 'E:\maven\apache-maven-3.10.0' }

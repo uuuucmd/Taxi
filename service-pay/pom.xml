@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <artifactId>FlyTaxi</artifactId>
-        <groupId>com.george</groupId>
+        <groupId>com.flytaxi</groupId>
         <version>1.0-SNAPSHOT</version>
     </parent>
     <artifactId>service-pay</artifactId>
@@ -17,7 +17,7 @@
 
     <dependencies>
         <dependency>
-            <groupId>com.george</groupId>
+            <groupId>com.flytaxi</groupId>
             <artifactId>internal-common</artifactId>
             <version>1.0-SNAPSHOT</version>
         </dependency>
