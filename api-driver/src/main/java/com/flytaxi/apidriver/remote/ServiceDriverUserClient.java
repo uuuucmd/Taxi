@@ -18,6 +18,9 @@ public interface ServiceDriverUserClient {
     @PostMapping("/driver-vehicle")
     ResponseResult<Car> registerVehicle(@RequestParam String driverPhone, @RequestBody Car car);
 
+    @PostMapping("/driver-vehicle/lock")
+    ResponseResult<Car> lockVehicle(@RequestParam String driverPhone, @RequestParam String vehicleNo);
+
     @PostMapping("/driver-vehicle/map")
     ResponseResult<Car> initializeVehicleMap(@RequestParam String driverPhone);
 

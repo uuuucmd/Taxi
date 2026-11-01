@@ -10,7 +10,8 @@ import lombok.Getter;
 @AllArgsConstructor
 public enum UserIdentity {
     PASSENGER("1"),
-    DRIVER("2");
+    DRIVER("2"),
+    ADMIN("3");
 
     @Getter
     private String identity;

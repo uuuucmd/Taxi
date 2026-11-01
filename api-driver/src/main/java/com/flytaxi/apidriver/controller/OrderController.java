@@ -28,6 +28,11 @@ public class OrderController {
         return withDriver(request, apiDriverOrderInfoService::driverOrders);
     }
 
+    @GetMapping("/{orderId}")
+    public ResponseResult detail(@PathVariable Long orderId, HttpServletRequest request) {
+        return withDriver(request, phone -> apiDriverOrderInfoService.orderDetail(orderId, phone));
+    }
+
     @PostMapping("/accept")
     public ResponseResult accept(@RequestParam Long orderId, HttpServletRequest request) {
         return withDriver(request, phone -> apiDriverOrderInfoService.acceptOrder(orderId, phone));

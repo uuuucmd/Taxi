@@ -2,6 +2,8 @@ server:
   port: "${GATEWAY_PORT:8080}"
 
 logging:
+  level:
+    root: INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [traceId=%X{traceId:-}] --- [%thread] %logger{36} : %msg%n"
 
@@ -13,6 +15,7 @@ spring:
   cloud:
     nacos:
       discovery:
+        ip: "${NACOS_DISCOVERY_IP:127.0.0.1}"
         server-addr: "${NACOS_SERVER_ADDR:localhost:8848}"
         username: "${NACOS_USERNAME:nacos}"
         password: "${NACOS_PASSWORD:}"

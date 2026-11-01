@@ -192,39 +192,39 @@ public class OrderInfoService {
         }
 
         // Determine whether the service is provided in current area using the pricing rules
-        ResponseResult<Boolean> priceRuleExists = isPriceRuleExists(orderRequest);
-        ResponseResult priceRuleExistsFailure = validateRequiredBooleanResponse(priceRuleExists);
-        if (priceRuleExistsFailure != null) {
-            return priceRuleExistsFailure;
-        }
-        if(!priceRuleExists.getData()){
-            return ResponseResult.fail(CommonStatus.SERVICE_NOT_PROVIDED.getCode(),CommonStatus.SERVICE_NOT_PROVIDED.getMessage());
-        }
+        //ResponseResult<Boolean> priceRuleExists = isPriceRuleExists(orderRequest);
+        // ResponseResult priceRuleExistsFailure = validateRequiredBooleanResponse(priceRuleExists);
+        // if (priceRuleExistsFailure != null) {
+        //     return priceRuleExistsFailure;
+        // }
+        // if(!priceRuleExists.getData()){
+        //     return ResponseResult.fail(CommonStatus.SERVICE_NOT_PROVIDED.getCode(),CommonStatus.SERVICE_NOT_PROVIDED.getMessage());
+        // }
 
         // Test if there are currently available drivers in the city
         String cityCode = orderRequest.getFareType().substring(0, orderRequest.getFareType().indexOf('$'));
-        ResponseResult<Boolean> availableDriver = serviceDriverUserClient.isAvailableDriver(cityCode);
-        ResponseResult availableDriverFailure = validateRequiredBooleanResponse(availableDriver);
-        if (availableDriverFailure != null) {
-            return availableDriverFailure;
-        }
-        if (!availableDriver.getData()){
-            return ResponseResult.fail(CommonStatus.CITY_NO_DRIVER.getCode(),
-                    "当前城市暂无可接单司机，请确认司机已绑定启用车辆并开始营运");
-        }
+        // ResponseResult<Boolean> availableDriver = serviceDriverUserClient.isAvailableDriver(cityCode);
+        // ResponseResult availableDriverFailure = validateRequiredBooleanResponse(availableDriver);
+        // if (availableDriverFailure != null) {
+        //     return availableDriverFailure;
+        // }
+        // if (!availableDriver.getData()){
+        //     return ResponseResult.fail(CommonStatus.CITY_NO_DRIVER.getCode(),
+        //             "当前城市暂无可接单司机，请确认司机已绑定启用车辆并开始营运");
+        // }
 
         // Check whether the version of the pricing rule is the latest
         PriceRuleIsNewRequest priceRuleIsNewRequest = new PriceRuleIsNewRequest();
         priceRuleIsNewRequest.setFareType(orderRequest.getFareType());
         priceRuleIsNewRequest.setFareVersion(orderRequest.getFareVersion());
-        ResponseResult<Boolean> aNew = servicePriceClient.isLatest(priceRuleIsNewRequest);
-        ResponseResult latestVersionFailure = validateRequiredBooleanResponse(aNew);
-        if (latestVersionFailure != null) {
-            return latestVersionFailure;
-        }
-        if (!(aNew.getData())){
-            return ResponseResult.fail(CommonStatus.PRICE_RULE_CHANGED.getCode(),CommonStatus.PRICE_RULE_CHANGED.getMessage());
-        }
+        // ResponseResult<Boolean> aNew = servicePriceClient.isLatest(priceRuleIsNewRequest);
+        // ResponseResult latestVersionFailure = validateRequiredBooleanResponse(aNew);
+        // if (latestVersionFailure != null) {
+        //     return latestVersionFailure;
+        // }
+        // if (!(aNew.getData())){
+        //     return ResponseResult.fail(CommonStatus.PRICE_RULE_CHANGED.getCode(),CommonStatus.PRICE_RULE_CHANGED.getMessage());
+        // }
 
         // Determine whether the placed device is a blacklist device
         if (isBlackDevice(orderRequest)) {

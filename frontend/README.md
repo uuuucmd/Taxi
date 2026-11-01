@@ -2,6 +2,21 @@
 
 Vue 3 + Vite frontend for the local FlyTaxi backend services.
 
+## Login Roles
+
+The first screen is a unified login page with three isolated workspaces:
+
+- Passenger: phone number and verification code, then ride planning and trip status.
+- Driver: phone number and verification code, then dispatch, vehicle, and duty status.
+- Administrator: username and password, then driver and vehicle management.
+
+The local administrator credentials default to `admin` / `admin123`. Override them
+with `BOSS_ADMIN_USERNAME` and `BOSS_ADMIN_PASSWORD` before starting `api-boss`.
+
+For local passenger and driver sign-in, `VERIFICATION_CODE_DEV_MODE=true` makes the
+verification-code response visible to the login page and fills the code automatically.
+The start script enables this mode by default. Keep it disabled outside local development.
+
 ## Run
 
 ```powershell
@@ -11,6 +26,18 @@ npm run dev -- --host 0.0.0.0
 ```
 
 Open `http://localhost:5173/`.
+
+## Routes
+
+- `/login` is the unified login page.
+- `/passenger`, `/driver`, and `/admin` are protected role workspaces.
+- Anonymous visits to a workspace redirect to `/login`.
+- Signed-in visits to another role are redirected back to the session role.
+- Unknown paths redirect through `/login` and then to the active workspace.
+
+The frontend uses HTML5 history mode. Vite handles the fallback during local
+development; a production web server must rewrite unknown frontend paths to
+`index.html` so workspace URLs continue to work after a refresh.
 
 ## Backend Proxy
 
@@ -58,7 +85,7 @@ are implemented.
 ## Dispatch Readiness
 
 A driver directory entry alone does not make a driver available. Sign in as the
-driver and register a vehicle, or have an administrator add and bind an enabled
+driver, lock an existing vehicle registered by an administrator or register a new
 vehicle, then start work. Vehicle city names are resolved through `service-map` and stored as
 six-digit city codes; numeric inputs must be city codes, not district or province
 codes. Driver enabled state is 1; vehicle enabled state is 0.
@@ -71,15 +98,18 @@ then checks vehicle city, enabled state, type, driver work status, and ongoing
 orders. No driver or vehicle is activated automatically by an order request.
 
 The driver's vehicle panel reloads the signed-in account's vehicle before every
-location upload. An unbound account shows a registration form and does not upload a
-placeholder vehicle ID. The upload API derives the vehicle from the driver's token
+location upload. An unbound account shows a lock form for an existing plate and a
+new-vehicle registration form, and does not upload a placeholder vehicle ID. The
+upload API derives the vehicle from the driver's token
 and active binding. Location timestamps use fresh epoch milliseconds when the
 optional time field is empty; storage failures are not reported as success.
 
-Drivers can register a new vehicle in the vehicle panel. The server uses the
+Drivers can lock an existing enabled, unbound vehicle by entering its plate in the
+vehicle panel. The server derives the driver from the token, locks the vehicle row,
+and creates the binding transactionally, so concurrent requests cannot lock the
+same vehicle twice. Drivers can also register a new vehicle; the server uses the
 signed-in driver's phone to create the vehicle and binding in one database
-transaction; client-supplied IDs, state, and map identifiers are ignored. A plate
-already registered in the fleet cannot be claimed by another driver. Drivers
+transaction, ignoring client-supplied IDs, state, and map identifiers. Drivers
 with an existing binding must contact an administrator to change vehicles.
 
 ## Local Simulation

@@ -102,11 +102,17 @@ export const driverApi = {
   registerVehicle(body) {
     return request('/api/driver', '/vehicle', withAuth('driver', { method: 'POST', body }))
   },
+  lockVehicle(vehicleNo) {
+    return request('/api/driver', `/vehicle/lock?vehicleNo=${encodeURIComponent(vehicleNo)}`, withAuth('driver', { method: 'POST' }))
+  },
   initializeVehicleMap() {
     return request('/api/driver', '/vehicle/map', withAuth('driver', { method: 'POST' }))
   },
   orders() {
     return request('/api/driver', '/order/list', withAuth('driver'))
+  },
+  orderDetail(orderId) {
+    return request('/api/driver', `/order/${encodeURIComponent(orderId)}`, withAuth('driver'))
   },
   acceptOrder(orderId) {
     return request('/api/driver', `/order/accept?orderId=${encodeURIComponent(orderId)}`, withAuth('driver', { method: 'POST' }))
@@ -144,26 +150,29 @@ export const driverApi = {
 }
 
 export const bossApi = {
+  login(username, password) {
+    return request('/api/boss', '/admin-auth/login', { method: 'POST', body: { username, password } })
+  },
   drivers({ page = 1, pageSize = 10, keyword = '', state = '' } = {}) {
     const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
     if (keyword.trim()) params.set('keyword', keyword.trim())
     if (state !== '') params.set('state', String(state))
-    return request('/api/boss', `/driver-users?${params}`)
+    return request('/api/boss', `/driver-users?${params}`, withAuth('boss'))
   },
   addDriver(body) {
-    return request('/api/boss', '/driver-user', { method: 'POST', body })
+    return request('/api/boss', '/driver-user', withAuth('boss', { method: 'POST', body }))
   },
   updateDriver(body) {
-    return request('/api/boss', '/driver-user', { method: 'PUT', body })
+    return request('/api/boss', '/driver-user', withAuth('boss', { method: 'PUT', body }))
   },
   addCar(body) {
-    return request('/api/boss', '/car', { method: 'POST', body })
+    return request('/api/boss', '/car', withAuth('boss', { method: 'POST', body }))
   },
   bind(body) {
-    return request('/api/boss', '/driver-car-binding-relationship/bind', { method: 'POST', body })
+    return request('/api/boss', '/driver-car-binding-relationship/bind', withAuth('boss', { method: 'POST', body }))
   },
   unbind(body) {
-    return request('/api/boss', '/driver-car-binding-relationship/unbind', { method: 'POST', body })
+    return request('/api/boss', '/driver-car-binding-relationship/unbind', withAuth('boss', { method: 'POST', body }))
   },
 }
 

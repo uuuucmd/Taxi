@@ -27,6 +27,11 @@ public class DriverVehicleController {
         return service.register(driverPhone, car);
     }
 
+    @PostMapping("/lock")
+    public ResponseResult<Car> lock(@RequestParam String driverPhone, @RequestParam String vehicleNo) {
+        return service.lockVehicle(driverPhone, vehicleNo);
+    }
+
     @PostMapping("/map")
     public ResponseResult<Car> initializeMap(@RequestParam String driverPhone) {
         return service.initializeMap(driverPhone);

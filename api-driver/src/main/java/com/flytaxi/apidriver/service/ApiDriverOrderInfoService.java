@@ -26,6 +26,21 @@ public class ApiDriverOrderInfoService {
         return serviceOrderClient.driverOrders(driverPhone);
     }
 
+    public ResponseResult<OrderInfo> orderDetail(Long orderId, String driverPhone) {
+        if (orderId == null) {
+            return ResponseResult.fail(0, "请先选择订单");
+        }
+        ResponseResult<OrderInfo> result = serviceOrderClient.driverOrder(driverPhone, orderId);
+        if (result == null) {
+            return ResponseResult.fail(0, "订单详情暂不可用，请稍后重试");
+        }
+        if (result.getCode() == 1 && result.getData() != null
+                && !driverPhone.equals(result.getData().getDriverPhone())) {
+            return ResponseResult.fail(0, "订单不属于当前司机");
+        }
+        return result;
+    }
+
     public ResponseResult acceptOrder(Long orderId, String driverPhone) {
         if (orderId == null) return ResponseResult.fail(0, "请先选择订单");
         return serviceOrderClient.acceptOrder(orderId, driverPhone);

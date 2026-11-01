@@ -1,7 +1,5 @@
 # FlyTaxi — Microservices Ride-Hailing Platform
 
-[![CI - Run Unit Tests](https://github.com/uuuucmd/Taxi/actions/workflows/ci.yml/badge.svg)](https://github.com/uuuucmd/Taxi/actions/workflows/ci.yml)
-
 A backend ride-hailing platform built with **Java 8 / Spring Boot 2.4.13 / Spring Cloud 2020.0.1** microservices. It implements driver dispatch and order-state workflows, versioned fare rules, SSE-based status delivery, and an Alipay sandbox adapter. The repository contains backend services; the passenger, driver, and admin clients are not included.
 
 > **Security note:** Committed configuration is mostly environment-backed for datasource, Nacos, Amap, and Alipay settings. Redis is environment-backed in `api-passenger` and `service-order`; `api-driver` still uses Spring Boot Redis defaults. `JWT_SECRET` is supported, but a deterministic legacy fallback remains. See Configuration Externalization Status and Selected Known Issues for details.
@@ -261,7 +259,7 @@ Committed configuration now uses environment-variable placeholders for many loca
 
 **Environment-backed:**
 - DB credentials/URLs for MySQL services
-- Nacos
+- Nacos (including `NACOS_DISCOVERY_IP`, which controls the IP registered with Nacos; it defaults to `127.0.0.1` for local all-in-one runs. Set it to the machine LAN IP when services run on different hosts.)
 - Amap / Alipay
 - `api-passenger` and `service-order` Redis
 - order-finalization policy/timeouts
@@ -355,7 +353,7 @@ This is a selected, non-exhaustive list. Authentication/authorization, payment, 
 - **Legacy edge authorization:** passenger and driver JWT interceptors exist, but typed principal migration, strict role isolation, and object ownership checks are planned.
 - **JWT fallback:** `JWT_SECRET` can be supplied through the environment, but a deterministic development fallback remains when `JWT_SECRET` is absent; production fail-closed configuration is planned.
 - **api-driver Redis defaults:** `api-driver` includes Redis support but lacks a `spring.redis` block, so it uses `localhost:6379` / database `0`.
-- **Verification delivery:** verification codes are generated and stored in Redis, but no SMS-provider delivery integration is currently implemented.
+- **Verification delivery:** verification codes are generated and stored in Redis, but no SMS-provider delivery integration is currently implemented. `scripts/start-flytaxi.ps1` enables `VERIFICATION_CODE_DEV_MODE` locally so the login page can receive and fill the generated code; disable it outside local development.
 - **Legacy profile configuration:** the intended `service-order` 8089/8090 port overrides still use the legacy `spring.profiles` document syntax; migration and startup verification are planned in Batch E.
 - **SSE trust and lifecycle:** `service-sse-push` exposes `/connect`, `/push`, and `/close` without subject/service authorization and stores emitters in a static `HashMap` without completion, timeout, or error lifecycle cleanup.
 - **Payment ownership:** server-owned amount, ownership validation, strict callback order/status correlation, failure acknowledgement, and idempotency are still planned. The protected passenger-edge payment route is not implemented yet.

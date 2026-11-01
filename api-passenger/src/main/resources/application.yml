@@ -1,5 +1,9 @@
 server:
   port: 8081
+  tomcat:
+    threads:
+      max: 500
+      min-spare: 20
 spring:
   config:
     import: optional:file:./.env[.properties],optional:file:../.env[.properties]
@@ -8,6 +12,7 @@ spring:
   cloud:
     nacos:
       discovery:
+        ip: "${NACOS_DISCOVERY_IP:127.0.0.1}"
         server-addr: "${NACOS_SERVER_ADDR:localhost:8848}"
         username: "${NACOS_USERNAME:nacos}"
         password: "${NACOS_PASSWORD:}"
@@ -21,8 +26,19 @@ logging:
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [traceId=%X{traceId:-}] --- [%thread] %logger{36} : %msg%n"
   level:
-    com.flytaxi.apipassenger.remote: DEBUG  # feign 客户端包路径
-    com.alibaba.cloud.nacos.discovery: DEBUG
-    com.alibaba.nacos.client.naming: DEBUG
-    org.springframework.cloud.loadbalancer: DEBUG
+    root: INFO
+
+verification-code:
+  dev-mode: "${VERIFICATION_CODE_DEV_MODE:false}"
+
+feign:
+  httpclient:
+    enabled: true
+    max-connections: 800
+    max-connections-per-route: 400
+  client:
+    config:
+      default:
+        connectTimeout: 2000
+        readTimeout: 10000
 

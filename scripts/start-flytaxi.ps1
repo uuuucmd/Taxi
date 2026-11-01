@@ -43,7 +43,12 @@ $env:REDIS_DATABASE = if ($env:REDIS_DATABASE) { $env:REDIS_DATABASE } else { '0
 $env:NACOS_SERVER_ADDR = if ($env:NACOS_SERVER_ADDR) { $env:NACOS_SERVER_ADDR } else { 'localhost:8848' }
 $env:NACOS_USERNAME = if ($env:NACOS_USERNAME) { $env:NACOS_USERNAME } else { 'nacos' }
 $env:NACOS_PASSWORD = if ($null -ne $env:NACOS_PASSWORD) { $env:NACOS_PASSWORD } else { '' }
+$env:NACOS_DISCOVERY_IP = if ($env:NACOS_DISCOVERY_IP) { $env:NACOS_DISCOVERY_IP } else { '127.0.0.1' }
 $env:AMAP_KEY = if ($env:AMAP_KEY) { $env:AMAP_KEY } else { '' }
+$env:BOSS_ADMIN_USERNAME = if ($env:BOSS_ADMIN_USERNAME) { $env:BOSS_ADMIN_USERNAME } else { 'admin' }
+$env:BOSS_ADMIN_PASSWORD = if ($env:BOSS_ADMIN_PASSWORD) { $env:BOSS_ADMIN_PASSWORD } else { 'admin123' }
+$env:VERIFICATION_CODE_DEV_MODE = if ($null -ne $env:VERIFICATION_CODE_DEV_MODE) { $env:VERIFICATION_CODE_DEV_MODE } else { 'true' }
+$env:DEBUG = 'false'
 
 function Test-Port {
     param([int]$Port)
@@ -60,9 +65,38 @@ function Test-Port {
     }
 }
 
+function Wait-Port {
+    param(
+        [int]$Port,
+        [int]$TimeoutSeconds = 5
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        if (Test-Port $Port) { return $true }
+        Start-Sleep -Milliseconds 500
+    }
+    return (Test-Port $Port)
+}
+
 if (-not (Test-Port 6379)) {
-    docker start flytaxi-redis | Out-Null
-    Start-Sleep -Seconds 2
+    docker start flytaxi-redis 2>$null | Out-Null
+    $redisReady = Wait-Port -Port 6379 -TimeoutSeconds 5
+
+    if (-not $redisReady) {
+        $dockerDesktop = Join-Path $env:LOCALAPPDATA 'Programs\DockerDesktop\Docker Desktop.exe'
+        if (Test-Path -LiteralPath $dockerDesktop) {
+            Write-Host 'Starting Docker Desktop for Redis...'
+            Start-Process -FilePath $dockerDesktop -WindowStyle Hidden | Out-Null
+            Wait-Port -Port 6379 -TimeoutSeconds 75 | Out-Null
+            docker start flytaxi-redis 2>$null | Out-Null
+            $redisReady = Wait-Port -Port 6379 -TimeoutSeconds 10
+        }
+    }
+
+    if (-not $redisReady) {
+        throw 'Redis is unavailable. Start Docker Desktop and the flytaxi-redis container.'
+    }
 }
 
 if (-not (Test-Port 8848)) {
@@ -77,6 +111,27 @@ if ($Build) {
     } finally {
         Pop-Location
     }
+}
+
+Push-Location $ProjectRoot
+try {
+    $mavenRepository = (mvn '-q' 'help:evaluate' '-Dexpression=settings.localRepository' '-DforceStdout' 2>$null).Trim()
+    if (-not $mavenRepository) { $mavenRepository = Join-Path $env:USERPROFILE '.m2\repository' }
+
+    $sharedArtifacts = @(
+        (Join-Path $mavenRepository 'com\flytaxi\internal-common\1.0-SNAPSHOT\internal-common-1.0-SNAPSHOT.jar'),
+        (Join-Path $mavenRepository 'com\flytaxi\security-support-core\1.0-SNAPSHOT\security-support-core-1.0-SNAPSHOT.jar'),
+        (Join-Path $mavenRepository 'com\flytaxi\security-support-session\1.0-SNAPSHOT\security-support-session-1.0-SNAPSHOT.jar')
+    )
+
+    if ($sharedArtifacts.Where({ -not (Test-Path -LiteralPath $_) }).Count -gt 0) {
+        mvn -q -pl internal-common,security-support-core,security-support-session -am install -DskipTests
+        if ($LASTEXITCODE -ne 0) { throw 'Failed to install shared Maven modules.' }
+    } else {
+        Write-Host 'Shared Maven modules already installed; skipping rebuild.'
+    }
+} finally {
+    Pop-Location
 }
 
 $Services = @(
@@ -120,7 +175,12 @@ foreach ($service in $Services) {
 `$env:NACOS_SERVER_ADDR = '$($env:NACOS_SERVER_ADDR)'
 `$env:NACOS_USERNAME = '$($env:NACOS_USERNAME)'
 `$env:NACOS_PASSWORD = '$($env:NACOS_PASSWORD)'
+`$env:NACOS_DISCOVERY_IP = '$($env:NACOS_DISCOVERY_IP)'
 `$env:AMAP_KEY = '$($env:AMAP_KEY)'
+`$env:BOSS_ADMIN_USERNAME = '$($env:BOSS_ADMIN_USERNAME)'
+`$env:BOSS_ADMIN_PASSWORD = '$($env:BOSS_ADMIN_PASSWORD)'
+`$env:VERIFICATION_CODE_DEV_MODE = '$($env:VERIFICATION_CODE_DEV_MODE)'
+`$env:DEBUG = 'false'
 `$env:SPRING_PROFILES_ACTIVE = '$profile'
 Set-Location '$ProjectRoot'
 mvn -pl $module spring-boot:run $runArgs
@@ -136,6 +196,9 @@ mvn -pl $module spring-boot:run $runArgs
     Set-Content -Path $pidFile -Value $process.Id
     Write-Host "Started $($service.Name) on port $($service.Port), pid $($process.Id)."
     Start-Sleep -Seconds 3
+    if (-not (Wait-Port -Port $service.Port -TimeoutSeconds 90)) {
+        throw 'Service failed to start.'
+    }
 }
 
 Write-Host "Logs: $LogRoot"

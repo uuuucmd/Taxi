@@ -66,7 +66,7 @@ public class DriverVehicleService {
                 || !Set.of("1", "2").contains(input.getVehicleColor() == null ? "1" : input.getVehicleColor())) {
             return ResponseResult.fail(0, "车辆类型、座位数或颜色无效");
         }
-        String plate = input.getVehicleNo().trim().replaceAll("\\s+", "").replace("\u00b7", "").toUpperCase(Locale.ROOT);
+        String plate = normalizePlate(input.getVehicleNo());
         if (carMapper.selectCount(new QueryWrapper<Car>().eq("vehicle_no", plate)) > 0) {
             return ResponseResult.fail(0, "该车牌已登记，请联系管理员确认归属，不能重复登记或绑定他人车辆");
         }
@@ -107,6 +107,48 @@ public class DriverVehicleService {
         relationship.setBindingTime(now);
         if (bindingMapper.insert(relationship) != 1) {
             throw new IllegalStateException("车辆绑定失败");
+        }
+        return ResponseResult.success(car);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public ResponseResult<Car> lockVehicle(String phone, String vehicleNo) {
+        DriverUser driver = driver(phone, true);
+        if (driver == null || !Integer.valueOf(1).equals(driver.getState())) {
+            return ResponseResult.fail(0, "司机账号不存在或已停用，无法锁定车辆");
+        }
+        if (binding(driver.getId()) != null) {
+            return ResponseResult.fail(CommonStatus.DRIVER_BIND_EXISTS.getCode(),
+                    "当前账号已锁定车辆，更换车辆请联系管理员");
+        }
+        if (!text(vehicleNo, 32)) {
+            return ResponseResult.fail(0, "请输入要锁定的车牌号");
+        }
+
+        String plate = normalizePlate(vehicleNo);
+        Car car = carMapper.selectOne(new QueryWrapper<Car>().eq("vehicle_no", plate).last("FOR UPDATE"));
+        if (car == null) {
+            return ResponseResult.fail(0, "未找到该车辆，请确认车牌号或联系管理员登记");
+        }
+        if (!Integer.valueOf(0).equals(car.getState())) {
+            return ResponseResult.fail(0, "该车辆已停用，请联系管理员处理");
+        }
+        DriverCarBindingRelationship occupied = bindingMapper.selectOne(
+                new QueryWrapper<DriverCarBindingRelationship>()
+                        .eq("car_id", car.getId())
+                        .eq("bind_state", 1));
+        if (occupied != null) {
+            return ResponseResult.fail(CommonStatus.CAR_BIND_EXISTS.getCode(),
+                    "该车辆已被其他司机锁定，请联系管理员处理");
+        }
+
+        DriverCarBindingRelationship relationship = new DriverCarBindingRelationship();
+        relationship.setDriverId(driver.getId());
+        relationship.setCarId(car.getId());
+        relationship.setBindState(1);
+        relationship.setBindingTime(LocalDateTime.now());
+        if (bindingMapper.insert(relationship) != 1) {
+            throw new IllegalStateException("车辆锁定失败");
         }
         return ResponseResult.success(car);
     }
@@ -177,6 +219,10 @@ public class DriverVehicleService {
 
     private boolean text(String value, int limit) {
         return value != null && !value.isBlank() && value.trim().length() <= limit;
+    }
+
+    private String normalizePlate(String value) {
+        return value.trim().replaceAll("\\s+", "").replace("\u00b7", "").toUpperCase(Locale.ROOT);
     }
 
     private ResponseResult<Car> unavailable() {

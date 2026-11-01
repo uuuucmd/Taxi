@@ -8,9 +8,13 @@ spring:
     url: "${SERVICE_ORDER_DB_URL:jdbc:mysql://localhost:3306/service-order?characterEncoding=utf-8&serverTimezone=GMT%2B8}"
     username: "${SERVICE_ORDER_DB_USERNAME:${DB_USERNAME:root}}"
     password: "${SERVICE_ORDER_DB_PASSWORD:${DB_PASSWORD:}}"
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
   cloud:
     nacos:
       discovery:
+        ip: "${NACOS_DISCOVERY_IP:127.0.0.1}"
         server-addr: "${NACOS_SERVER_ADDR:localhost:8848}"
         username: "${NACOS_USERNAME:nacos}"
         password: "${NACOS_PASSWORD:}"
@@ -36,6 +40,10 @@ order:
     lease-safety-margin-ms: "${ORDER_FINALIZATION_LEASE_SAFETY_MARGIN_MS:30000}"
 
 feign:
+  httpclient:
+    enabled: true
+    max-connections: 800
+    max-connections-per-route: 400
   client:
     config:
       finalizationDriverUserClient:
@@ -49,6 +57,8 @@ feign:
         readTimeout: "${ORDER_FINALIZATION_PRICE_READ_TIMEOUT_MS:10000}"
 
 logging:
+  level:
+    root: INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [traceId=%X{traceId:-}] --- [%thread] %logger{36} : %msg%n"
 
@@ -57,8 +67,16 @@ spring:
   profiles: 8089
 server:
   port: 8089
+  tomcat:
+    threads:
+      max: 500
+      min-spare: 20
 ---
 spring:
   profiles: 8090
 server:
   port: 8090
+  tomcat:
+    threads:
+      max: 500
+      min-spare: 20

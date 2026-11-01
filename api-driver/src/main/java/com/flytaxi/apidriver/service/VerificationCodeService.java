@@ -13,6 +13,7 @@ import com.flytaxi.internalCommon.util.RedisPrefixUtils;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -35,6 +36,9 @@ public class VerificationCodeService {
     @Autowired
     StringRedisTemplate stringRedisTemplate;
 
+    @Value("${verification-code.dev-mode:false}")
+    private boolean devMode;
+
     /**
      * This function is used to check the existence of a driver and if he exists, send back the verification code
      * @param driverPhone - the phone number according to which the identity of the driver would be assured
@@ -47,6 +51,11 @@ public class VerificationCodeService {
         int ifExists = data.getIfExists();
         if (ifExists == DriverCarConstant.DRIVER_NOT_EXISTS){
             return ResponseResult.fail(CommonStatus.DRIVER_NOT_EXISTS.getCode(),CommonStatus.DRIVER_NOT_EXISTS.getMessage());
+        }
+        if (devMode) {
+            String key = RedisPrefixUtils.generateKey(driverPhone, UserIdentity.DRIVER.getIdentity());
+            stringRedisTemplate.opsForValue().set(key, String.valueOf(123456), 2, TimeUnit.MINUTES);
+            return ResponseResult.success(String.valueOf(123456));
         }
         log.info("Driver account exists for verification code request");
         // get VC

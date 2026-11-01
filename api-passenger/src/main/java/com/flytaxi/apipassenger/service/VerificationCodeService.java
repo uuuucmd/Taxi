@@ -14,6 +14,7 @@ import com.flytaxi.internalCommon.util.RedisPrefixUtils;
 import com.flytaxi.apipassenger.remote.ServicePassengerUserClient;
 import com.flytaxi.apipassenger.remote.serviceVerificationCodeClient;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -39,6 +40,9 @@ public class VerificationCodeService {
     @Autowired
     private StringRedisTemplate redisTemplate;
 
+    @Value("${verification-code.dev-mode:false}")
+    private boolean devMode;
+
     /**
      * This function is aimed to generate verification codes for passengers and
      * then store these codes in Redis
@@ -54,6 +58,10 @@ public class VerificationCodeService {
 
         // Store verification code in Redis
         redisTemplate.opsForValue().set(key, String.valueOf(codeNumber), 2, TimeUnit.MINUTES);
+
+        if (devMode) {
+            return ResponseResult.success(String.valueOf(codeNumber));
+        }
 
         // Through the SMS service provider, send the verification code to the mobile phone.
 
