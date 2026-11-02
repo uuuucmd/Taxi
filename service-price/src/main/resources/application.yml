@@ -15,5 +15,15 @@ spring:
         server-addr: "${NACOS_SERVER_ADDR:localhost:8848}"
         username: "${NACOS_USERNAME:nacos}"
         password: "${NACOS_PASSWORD:}"
+  redis:
+    host: "${REDIS_HOST:localhost}"
+    port: "${REDIS_PORT:6379}"
+    database: "${REDIS_DATABASE:0}"
+    timeout: "${REDIS_TIMEOUT:500ms}"
+
+price:
+  rule:
+    cache-ttl-seconds: "${PRICE_RULE_CACHE_TTL_SECONDS:3600}"
+    cache-not-exists-ttl-seconds: "${PRICE_RULE_CACHE_NOT_EXISTS_TTL_SECONDS:60}"
 server:
   port: 8084

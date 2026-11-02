@@ -2,7 +2,7 @@
 
 A backend ride-hailing platform built with **Java 8 / Spring Boot 2.4.13 / Spring Cloud 2020.0.1** microservices. It implements driver dispatch and order-state workflows, versioned fare rules, SSE-based status delivery, and an Alipay sandbox adapter. The repository contains backend services; the passenger, driver, and admin clients are not included.
 
-> **Security note:** Committed configuration is mostly environment-backed for datasource, Nacos, Amap, and Alipay settings. Redis is environment-backed in `api-passenger` and `service-order`; `api-driver` still uses Spring Boot Redis defaults. `JWT_SECRET` is supported, but a deterministic legacy fallback remains. See Configuration Externalization Status and Selected Known Issues for details.
+> **Security note:** Committed configuration is mostly environment-backed for datasource, Nacos, Amap, and Alipay settings. Redis is environment-backed in `api-passenger`, `service-order`, and `service-price`; `api-driver` still uses Spring Boot Redis defaults. `JWT_SECRET` is supported, but a deterministic legacy fallback remains. See Configuration Externalization Status and Selected Known Issues for details.
 
 ---
 
@@ -261,7 +261,8 @@ Committed configuration now uses environment-variable placeholders for many loca
 - DB credentials/URLs for MySQL services
 - Nacos (including `NACOS_DISCOVERY_IP`, which controls the IP registered with Nacos; it defaults to `127.0.0.1` for local all-in-one runs. Set it to the machine LAN IP when services run on different hosts.)
 - Amap / Alipay
-- `api-passenger` and `service-order` Redis
+- `api-passenger`, `service-order`, and `service-price` Redis
+- `service-price` pricing-rule cache TTL through `PRICE_RULE_CACHE_TTL_SECONDS` (defaults to one hour) and `PRICE_RULE_CACHE_NOT_EXISTS_TTL_SECONDS` (defaults to one minute)
 - order-finalization policy/timeouts
 
 **Known gaps:**

@@ -1,6 +1,5 @@
 package com.flytaxi.serviceprice.service;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.flytaxi.internalCommon.constant.CommonStatus;
 import com.flytaxi.internalCommon.dto.PriceRule;
 import com.flytaxi.internalCommon.dto.ResponseResult;
@@ -8,16 +7,12 @@ import com.flytaxi.internalCommon.request.PredictPriceDTO;
 import com.flytaxi.internalCommon.response.DirectionResponse;
 import com.flytaxi.internalCommon.response.PredictPriceResponse;
 import com.flytaxi.internalCommon.util.BigDecimalUtils;
-import com.flytaxi.serviceprice.mapper.PriceRuleMapper;
 import com.flytaxi.serviceprice.remote.ServiceMapClient;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 /**
  * @Date: 2024-10-24-15:28
@@ -31,9 +26,9 @@ public class PredictPriceService {
     @Autowired
     private ServiceMapClient client;
 
-    // connect with dataset
+    // Resolve pricing rules through the shared Redis-backed lookup.
     @Autowired
-    private PriceRuleMapper mapper;
+    private PriceRuleService priceRuleService;
 
 
     /**
@@ -74,18 +69,14 @@ public class PredictPriceService {
         Integer distance = directionData.getDistance();
         Integer duration = directionData.getDuration();
 
-        // load calculation rules
-        QueryWrapper queryWrapper = new QueryWrapper();
-        queryWrapper.eq("city_code", cityCode);
-        queryWrapper.eq("vehicle_type", vehicleType);
-        queryWrapper.orderByDesc("fare_version");
-
-        List<PriceRule> priceRules = mapper.selectList(queryWrapper);
-        if (priceRules.isEmpty()) {
-            return ResponseResult.fail(CommonStatus.PRICE_RULE_NOT_EXISTS.getCode(),
-                                        CommonStatus.PRICE_RULE_NOT_EXISTS.getMessage());
+        ResponseResult<PriceRule> latestRule = getLatestRule(cityCode, vehicleType);
+        if (latestRule.getCode() != CommonStatus.SUCCESS.getCode()) {
+            return ResponseResult.fail(latestRule.getCode(), latestRule.getMessage());
         }
-        PriceRule rule = priceRules.get(0);
+        PriceRule rule = latestRule.getData();
+        if (rule == null) {
+            return downstreamResponseError();
+        }
 
         // calculate the predicted price
         double price = calculatePrice(distance, duration, rule);
@@ -109,22 +100,30 @@ public class PredictPriceService {
      */
     public ResponseResult<Double> getPrice( Integer distance ,  Integer duration, String cityCode, String vehicleType){
         cityCode = normalizeCityCode(cityCode);
-        // Query pricing rules
-        QueryWrapper queryWrapper = new QueryWrapper();
-        queryWrapper.eq("city_code",cityCode);
-        queryWrapper.eq("vehicle_type",vehicleType);
-        queryWrapper.orderByDesc("fare_version");
-
-        List<PriceRule> priceRules = mapper.selectList(queryWrapper);
-        if (priceRules.size() == 0){
-            return ResponseResult.fail(CommonStatus.PRICE_RULE_NOT_EXISTS.getCode(),
-                    CommonStatus.PRICE_RULE_NOT_EXISTS.getMessage());
+        ResponseResult<PriceRule> latestRule = getLatestRule(cityCode, vehicleType);
+        if (latestRule.getCode() != CommonStatus.SUCCESS.getCode()) {
+            return ResponseResult.fail(latestRule.getCode(), latestRule.getMessage());
         }
-
-        PriceRule priceRule = priceRules.get(0);
+        PriceRule priceRule = latestRule.getData();
+        if (priceRule == null) {
+            return downstreamResponseError();
+        }
 
         double price = calculatePrice(distance, duration, priceRule);
         return ResponseResult.success(price);
+    }
+
+    private ResponseResult<PriceRule> getLatestRule(String cityCode, String vehicleType) {
+        if (cityCode == null || cityCode.isBlank() || vehicleType == null || vehicleType.isBlank()) {
+            return ResponseResult.fail(CommonStatus.PRICE_RULE_NOT_EXISTS.getCode(),
+                    CommonStatus.PRICE_RULE_NOT_EXISTS.getMessage());
+        }
+        return priceRuleService.getLatestVersion(cityCode + "$" + vehicleType);
+    }
+
+    private ResponseResult downstreamResponseError() {
+        return ResponseResult.fail(CommonStatus.DOWNSTREAM_RESPONSE_ERROR.getCode(),
+                CommonStatus.DOWNSTREAM_RESPONSE_ERROR.getMessage());
     }
 
 
