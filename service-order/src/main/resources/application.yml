@@ -32,6 +32,9 @@ taxi:
   local-simulation: "${LOCAL_SIMULATION:true}"
 
 order:
+  accept-timeout:
+    minutes: "${ORDER_ACCEPT_TIMEOUT_MINUTES:30}"
+    scan-delay-ms: "${ORDER_ACCEPT_TIMEOUT_SCAN_DELAY_MS:60000}"
   finalization:
     max-attempts: "${ORDER_FINALIZATION_MAX_ATTEMPTS:3}"
     base-retry-delay-seconds: "${ORDER_FINALIZATION_BASE_RETRY_DELAY_SECONDS:30}"

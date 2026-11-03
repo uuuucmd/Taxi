@@ -9,7 +9,6 @@ import com.flytaxi.internalCommon.constant.UserIdentity;
 import com.flytaxi.internalCommon.dto.Car;
 import com.flytaxi.internalCommon.dto.DriverCarBindingRelationship;
 import com.flytaxi.internalCommon.dto.OrderInfo;
-import com.flytaxi.internalCommon.dto.PriceRule;
 import com.flytaxi.internalCommon.dto.ResponseResult;
 import com.flytaxi.internalCommon.request.OrderRequest;
 import com.flytaxi.internalCommon.request.PredictPriceDTO;
@@ -64,15 +63,17 @@ import java.util.function.Consumer;
 @Slf4j
 public class OrderInfoService {
 
-    private static final int MAX_DISPATCH_ATTEMPTS = 6;
     private static final int FINALIZATION_RETRY_BATCH_SIZE = 50;
+    private static final int UNACCEPTED_ORDER_CANCEL_BATCH_SIZE = 100;
     private static final long ORDER_CREATE_LOCK_WAIT_SECONDS = 2L;
     private static final String ORDER_CREATE_LOCK_PREFIX = "order:create:passenger:";
     private static final Pattern IDEMPOTENCY_KEY_PATTERN = Pattern.compile("[A-Za-z0-9_-]{1,64}");
     private static final String PRESERVE_GMT_CREATE_SQL = "gmt_create = gmt_create";
     private static final String PRESERVE_GMT_MODIFIED_SQL = "gmt_modified = gmt_modified";
-    private long dispatchRetryDelayMs = TimeUnit.SECONDS.toMillis(20);
     private Clock clock = Clock.systemDefaultZone();
+
+    @Value("${order.accept-timeout.minutes:30}")
+    private long acceptTimeoutMinutes = 30L;
 
     @Value("${taxi.local-simulation:true}")
     private boolean localSimulation = true;
@@ -191,40 +192,35 @@ public class OrderInfoService {
             return existingRequest;
         }
 
-        // Determine whether the service is provided in current area using the pricing rules
-        //ResponseResult<Boolean> priceRuleExists = isPriceRuleExists(orderRequest);
-        // ResponseResult priceRuleExistsFailure = validateRequiredBooleanResponse(priceRuleExists);
-        // if (priceRuleExistsFailure != null) {
-        //     return priceRuleExistsFailure;
-        // }
-        // if(!priceRuleExists.getData()){
-        //     return ResponseResult.fail(CommonStatus.SERVICE_NOT_PROVIDED.getCode(),CommonStatus.SERVICE_NOT_PROVIDED.getMessage());
-        // }
-
-        // Test if there are currently available drivers in the city
-        String cityCode = orderRequest.getFareType().substring(0, orderRequest.getFareType().indexOf('$'));
-        // ResponseResult<Boolean> availableDriver = serviceDriverUserClient.isAvailableDriver(cityCode);
-        // ResponseResult availableDriverFailure = validateRequiredBooleanResponse(availableDriver);
-        // if (availableDriverFailure != null) {
-        //     return availableDriverFailure;
-        // }
-        // if (!availableDriver.getData()){
-        //     return ResponseResult.fail(CommonStatus.CITY_NO_DRIVER.getCode(),
-        //             "当前城市暂无可接单司机，请确认司机已绑定启用车辆并开始营运");
-        // }
+        String fareType = orderRequest.getFareType();
+        String cityCode = cityCodeFromFareType(fareType);
+        if (cityCode == null || fareType.substring(fareType.indexOf('$') + 1).isBlank()) {
+            return ResponseResult.fail(CommonStatus.PRICE_RULE_NOT_EXISTS.getCode(),
+                    CommonStatus.PRICE_RULE_NOT_EXISTS.getMessage());
+        }
+        if (orderRequest.getFareVersion() == null) {
+            return ResponseResult.fail(CommonStatus.PRICE_RULE_CHANGED.getCode(),
+                    CommonStatus.PRICE_RULE_CHANGED.getMessage());
+        }
 
         // Check whether the version of the pricing rule is the latest
         PriceRuleIsNewRequest priceRuleIsNewRequest = new PriceRuleIsNewRequest();
-        priceRuleIsNewRequest.setFareType(orderRequest.getFareType());
+        priceRuleIsNewRequest.setFareType(fareType);
         priceRuleIsNewRequest.setFareVersion(orderRequest.getFareVersion());
-        // ResponseResult<Boolean> aNew = servicePriceClient.isLatest(priceRuleIsNewRequest);
-        // ResponseResult latestVersionFailure = validateRequiredBooleanResponse(aNew);
-        // if (latestVersionFailure != null) {
-        //     return latestVersionFailure;
-        // }
-        // if (!(aNew.getData())){
-        //     return ResponseResult.fail(CommonStatus.PRICE_RULE_CHANGED.getCode(),CommonStatus.PRICE_RULE_CHANGED.getMessage());
-        // }
+        ResponseResult<Boolean> latestVersion = servicePriceClient.isLatest(priceRuleIsNewRequest);
+        if (latestVersion != null
+                && latestVersion.getCode() == CommonStatus.PRICE_RULE_NOT_EXISTS.getCode()) {
+            return ResponseResult.fail(CommonStatus.SERVICE_NOT_PROVIDED.getCode(),
+                    CommonStatus.SERVICE_NOT_PROVIDED.getMessage());
+        }
+        ResponseResult latestVersionFailure = validateRequiredBooleanResponse(latestVersion);
+        if (latestVersionFailure != null) {
+            return latestVersionFailure;
+        }
+        if (!latestVersion.getData()) {
+            return ResponseResult.fail(CommonStatus.PRICE_RULE_CHANGED.getCode(),
+                    CommonStatus.PRICE_RULE_CHANGED.getMessage());
+        }
 
         // Determine whether the placed device is a blacklist device
         if (isBlackDevice(orderRequest)) {
@@ -308,37 +304,6 @@ public class OrderInfoService {
                             orderRequest.getPassengerId());
                 }
             }
-        }
-
-        if (localSimulation) {
-            return orderCreated(orderInfo);
-        }
-
-        // Retry real-time dispatch up to 6 times, waiting 20 seconds between failed attempts.
-        for (int i =0;i<MAX_DISPATCH_ATTEMPTS;i++){
-            // Dispatch real-time order
-            int result = dispatchRealTimeOrder(orderInfo);
-            if (result == 1){
-                break;
-            }
-            if (i == MAX_DISPATCH_ATTEMPTS - 1){
-                // If there is no available driver, the order is invalid
-                orderInfo.setOrderStatus(OrderConstant.ORDER_INVALID);
-                orderInfoMapper.updateById(orderInfo);
-                return ResponseResult.fail(CommonStatus.DISPATCH_FAILED.getCode(),
-                        CommonStatus.DISPATCH_FAILED.getMessage());
-            }else {
-                // wait for 20s
-                try {
-                    Thread.sleep(dispatchRetryDelayMs);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    return ResponseResult.fail(CommonStatus.FAIL.getCode(), "Dispatch retry interrupted");
-                }
-            }
-
-
-
         }
 
         return orderCreated(orderInfo);
@@ -601,26 +566,6 @@ public class OrderInfoService {
         return fareType.substring(0, separator);
     }
 
-
-    /**
-     * This method is used to determine whether a pricing rule exists
-     * @param orderRequest
-     * @return
-     */
-    private ResponseResult<Boolean> isPriceRuleExists(OrderRequest orderRequest){
-        String fareType = orderRequest.getFareType();
-        int index = fareType.indexOf("$");
-        String cityCode = fareType.substring(0, index);
-        String vehicleType = fareType.substring(index + 1);
-
-        PriceRule priceRule = new PriceRule();
-        priceRule.setCityCode(cityCode);
-        priceRule.setVehicleType(vehicleType);
-
-        ResponseResult<Boolean> booleanResponseResult = servicePriceClient.ifPriceExists(priceRule);
-        return booleanResponseResult;
-
-    }
 
     private ResponseResult validateRequiredBooleanResponse(ResponseResult<Boolean> response) {
         if (response == null) {
@@ -929,6 +874,58 @@ public class OrderInfoService {
             }
         }
         return processed;
+    }
+
+    public int cancelUnacceptedOrders(LocalDateTime now) {
+        return cancelUnacceptedOrders(now, UNACCEPTED_ORDER_CANCEL_BATCH_SIZE);
+    }
+
+    public int cancelUnacceptedOrders(LocalDateTime now, int batchSize) {
+        if (now == null) {
+            return 0;
+        }
+        LocalDateTime acceptDeadline = now.minusMinutes(Math.max(1L, acceptTimeoutMinutes));
+        QueryWrapper<OrderInfo> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("order_status", OrderConstant.ORDER_START)
+                .isNull("driver_phone")
+                .le("gmt_create", acceptDeadline)
+                .orderByAsc("gmt_create", "id")
+                .last("LIMIT " + Math.max(1, batchSize));
+
+        List<OrderInfo> expiredOrders = orderInfoMapper.selectList(queryWrapper);
+        if (expiredOrders == null) {
+            return 0;
+        }
+
+        int cancelled = 0;
+        for (OrderInfo expiredOrder : expiredOrders) {
+            if (expiredOrder == null || expiredOrder.getId() == null) {
+                continue;
+            }
+            try {
+                UpdateWrapper<OrderInfo> updateWrapper = new UpdateWrapper<>();
+                updateWrapper.eq("id", expiredOrder.getId())
+                        .eq("order_status", OrderConstant.ORDER_START)
+                        .isNull("driver_phone")
+                        .le("gmt_create", acceptDeadline)
+                        .set("order_status", OrderConstant.ORDER_CANCEL)
+                        .set("cancel_time", now)
+                        .set("cancel_operator", Integer.parseInt(UserIdentity.ADMIN.getIdentity()))
+                        .set("cancel_type_code", OrderConstant.CANCEL_PLATFORM_BEFORE)
+                        .set("gmt_modified", now);
+                preserveOrderCreationTime(updateWrapper);
+
+                if (orderInfoMapper.update(null, updateWrapper) == 1) {
+                    cancelled++;
+                    log.info("Order status changed; action=accept_timeout, orderId={}, fromStatus={}, toStatus={}, result=success",
+                            expiredOrder.getId(), OrderConstant.ORDER_START, OrderConstant.ORDER_CANCEL);
+                }
+            } catch (RuntimeException exception) {
+                log.warn("Unaccepted order timeout cancellation failed; orderId={}, exceptionType={}",
+                        expiredOrder.getId(), exception.getClass().getSimpleName());
+            }
+        }
+        return cancelled;
     }
 
     private ResponseResult claimAndFinalize(OrderInfo orderInfo, OrderRequest orderRequest, LocalDateTime now) {
@@ -1740,9 +1737,39 @@ public class OrderInfoService {
         if (driverPhone == null || driverPhone.isBlank()) {
             return ResponseResult.fail(0, "司机账号无效");
         }
+        LocalDateTime pendingSince = LocalDateTime.now(clock)
+                .minusMinutes(Math.max(1L, acceptTimeoutMinutes));
+        String driverCityCode = null;
+        try {
+            ResponseResult<DriverCarBindingRelationship> bindingResult =
+                    serviceDriverUserClient.getBindingByPhone(driverPhone);
+            DriverCarBindingRelationship binding = bindingResult == null ? null : bindingResult.getData();
+            if (bindingResult != null && bindingResult.getCode() == CommonStatus.SUCCESS.getCode()
+                    && binding != null && binding.getCarId() != null) {
+                ResponseResult<Car> carResult = serviceDriverUserClient.getCarById(binding.getCarId());
+                Car car = carResult == null ? null : carResult.getData();
+                if (carResult != null && carResult.getCode() == CommonStatus.SUCCESS.getCode()
+                        && car != null && Integer.valueOf(0).equals(car.getState())
+                        && car.getAddress() != null && !car.getAddress().isBlank()) {
+                    driverCityCode = car.getAddress();
+                }
+            }
+        } catch (RuntimeException exception) {
+            log.warn("Driver order context lookup failed; driverPhone={}, reason={}",
+                    driverPhone, exception.getMessage());
+        }
+
+        final String cityCode = driverCityCode;
         QueryWrapper<OrderInfo> query = new QueryWrapper<>();
-        query.and(wrapper -> wrapper.eq("driver_phone", driverPhone)
-                        .or().isNull("driver_phone").eq("order_status", OrderConstant.ORDER_START))
+        query.and(wrapper -> {
+                    wrapper.eq("driver_phone", driverPhone);
+                    if (cityCode != null) {
+                        wrapper.or(unassigned -> unassigned.isNull("driver_phone")
+                                .eq("order_status", OrderConstant.ORDER_START)
+                                .likeRight("fare_type", cityCode + "$")
+                                .ge("gmt_create", pendingSince));
+                    }
+                })
                 .orderByDesc("gmt_create", "id")
                 .last("LIMIT 100");
         return ResponseResult.success(orderInfoMapper.selectList(query));
@@ -1764,6 +1791,12 @@ public class OrderInfoService {
                 || order.getDriverPhone() != null) {
             return ResponseResult.fail(CommonStatus.ORDER_STATE_TRANSITION_NOT_ALLOWED.getCode(),
                     "订单已被其他司机接单");
+        }
+        LocalDateTime acceptDeadline = LocalDateTime.now(clock)
+                .minusMinutes(Math.max(1L, acceptTimeoutMinutes));
+        if (order.getGmtCreate() == null || order.getGmtCreate().isBefore(acceptDeadline)) {
+            return ResponseResult.fail(CommonStatus.ORDER_STATE_TRANSITION_NOT_ALLOWED.getCode(),
+                    "订单已超过可接单时间");
         }
 
         ResponseResult<DriverCarBindingRelationship> bindingResult =
@@ -1788,9 +1821,8 @@ public class OrderInfoService {
         String orderCityCode = cityCodeFromFareType(order.getFareType());
         if (orderCityCode == null || orderCityCode.isBlank()) orderCityCode = order.getAddress();
         if (carResult == null || carResult.getCode() != CommonStatus.SUCCESS.getCode() || car == null
-                || !orderCityCode.equals(car.getAddress())
-                || order.getVehicleType() == null || !order.getVehicleType().equals(car.getVehicleType())) {
-            // 司机车辆必须与订单所在城市和车型匹配。
+                || !orderCityCode.equals(car.getAddress())) {
+            // 司机车辆必须与订单所在城市匹配。
             return ResponseResult.fail(CommonStatus.NO_AVAILABLE_DRIVER.getCode(),
                     "Driver vehicle does not match this order");
         }
@@ -1805,6 +1837,7 @@ public class OrderInfoService {
             update.eq("id", orderId)
                     .eq("order_status", OrderConstant.ORDER_START)
                     .isNull("driver_phone")
+                    .ge("gmt_create", acceptDeadline)
                     .set("driver_id", driver.getDriverId())
                     .set("driver_phone", driver.getDriverPhone())
                     .set("car_id", driver.getCarId())
