@@ -5,9 +5,13 @@ spring:
     name: service-price
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: "${SERVICE_PRICE_DB_URL:jdbc:mysql://localhost:3306/service-price?characterEncoding=utf-8&serverTimezone=GMT%2B8}"
+    url: "${SERVICE_PRICE_DB_URL:jdbc:mysql://localhost:3306/service-price?characterEncoding=utf-8&serverTimezone=GMT%2B8&connectTimeout=3000&socketTimeout=5000}"
     username: "${SERVICE_PRICE_DB_USERNAME:${DB_USERNAME:root}}"
     password: "${SERVICE_PRICE_DB_PASSWORD:${DB_PASSWORD:}}"
+    hikari:
+      maximum-pool-size: 20
+      connection-timeout: 3000
+      validation-timeout: 1000
   cloud:
     nacos:
       discovery:
@@ -20,6 +24,10 @@ spring:
     port: "${REDIS_PORT:6379}"
     database: "${REDIS_DATABASE:0}"
     timeout: "${REDIS_TIMEOUT:500ms}"
+
+mybatis-plus:
+  configuration:
+    default-statement-timeout: 5
 
 price:
   rule:

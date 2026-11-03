@@ -31,6 +31,7 @@ public enum CommonStatus {
     PRICE_RULE_EXISTS(1301, "price rule already exists, no need to add"),
     PRICE_RULE_NOT_EDIT(1302, "no change in price rule"),
     PRICE_RULE_CHANGED(1303, "price rule version is not latest"),
+    PRICE_RULE_BUSY(1304, "price rule is being updated, please retry later"),
 
 
     // the map returned from Amap is invalid, from 1400-1499

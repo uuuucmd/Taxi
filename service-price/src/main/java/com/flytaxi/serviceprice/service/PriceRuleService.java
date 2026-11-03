@@ -7,25 +7,34 @@ import com.flytaxi.internalCommon.dto.PriceRule;
 import com.flytaxi.internalCommon.dto.ResponseResult;
 import com.flytaxi.serviceprice.mapper.PriceRuleMapper;
 import com.flytaxi.serviceprice.cache.PriceRuleCache;
+import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.web.bind.annotation.RequestParam;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * This class is used to provide services related to pricing rules for controller
  */
 @Service
+@Slf4j
 public class PriceRuleService {
+
+    private static final String PRICE_RULE_LOCK_PREFIX = "price:rule:lock:";
+    private static final long WRITE_LOCK_WAIT_SECONDS = 1L;
+    private static final long READ_LOCK_WAIT_MILLIS = 300L;
 
     @Autowired
     PriceRuleMapper priceRuleMapper;
 
     @Autowired
     PriceRuleCache priceRuleCache;
+
+    @Autowired
+    RedissonClient redissonClient;
 
     /**
      * This method is used to add pricing rules
@@ -40,25 +49,30 @@ public class PriceRuleService {
         String fareType = cityCode + "$" + vehicleType;
         priceRule.setFareType(fareType);
 
-        // query for specific rule
-        QueryWrapper<PriceRule> queryWrapper = new QueryWrapper<>();
-        queryWrapper.eq("city_code",cityCode);
-        queryWrapper.eq("vehicle_type",vehicleType);
-        queryWrapper.orderByDesc("fare_version");
-
-        List<PriceRule> priceRules = priceRuleMapper.selectList(queryWrapper);
-        Integer fareVersion = 0;
-
-        // Once the same pricing rule already exists, it cannot be added
-        if (priceRules.size()>0){
-            return ResponseResult.fail(CommonStatus.PRICE_RULE_EXISTS.getCode(),CommonStatus.PRICE_RULE_EXISTS.getMessage());
+        RLock lock = priceRuleLock(fareType);
+        if (!tryLock(lock, WRITE_LOCK_WAIT_SECONDS, TimeUnit.SECONDS, fareType)) {
+            return priceRuleBusy();
         }
-        priceRule.setFareVersion(++fareVersion);
+        try {
+            QueryWrapper<PriceRule> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("city_code",cityCode);
+            queryWrapper.eq("vehicle_type",vehicleType);
+            queryWrapper.orderByDesc("fare_version");
 
+            List<PriceRule> priceRules = priceRuleMapper.selectList(queryWrapper);
+            Integer fareVersion = 0;
 
-        priceRuleMapper.insert(priceRule);
-        priceRuleCache.evict(fareType);
-        return ResponseResult.success();
+            if (priceRules.size()>0){
+                return ResponseResult.fail(CommonStatus.PRICE_RULE_EXISTS.getCode(),CommonStatus.PRICE_RULE_EXISTS.getMessage());
+            }
+            priceRule.setFareVersion(++fareVersion);
+
+            priceRuleMapper.insert(priceRule);
+            priceRuleCache.put(fareType, priceRule);
+            return ResponseResult.success();
+        } finally {
+            unlock(lock);
+        }
     }
 
 
@@ -73,36 +87,42 @@ public class PriceRuleService {
         String fareType = cityCode + "$" + vehicleType;
         priceRule.setFareType(fareType);
 
-        QueryWrapper<PriceRule> queryWrapper = new QueryWrapper<>();
-        queryWrapper.eq("city_code",cityCode);
-        queryWrapper.eq("vehicle_type",vehicleType);
-        queryWrapper.orderByDesc("fare_version");
-
-        List<PriceRule> priceRules = priceRuleMapper.selectList(queryWrapper);
-        Integer fareVersion = 0;
-        if (priceRules.size()>0){
-            PriceRule lastPriceRule = priceRules.get(0);
-            Double unitPricePerMile = lastPriceRule.getUnitPricePerMile();
-            Double unitPricePerMinute = lastPriceRule.getUnitPricePerMinute();
-            Double startFare = lastPriceRule.getStartFare();
-            Integer startMile = lastPriceRule.getStartMile();
-
-            if (unitPricePerMile.doubleValue() == priceRule.getUnitPricePerMile().doubleValue()
-            && unitPricePerMinute.doubleValue() == priceRule.getUnitPricePerMinute().doubleValue()
-            && startFare.doubleValue() == priceRule.getStartFare().doubleValue()
-            && startMile.intValue() == priceRule.getStartMile().intValue()){
-                return ResponseResult.fail(CommonStatus.PRICE_RULE_NOT_EDIT.getCode(),CommonStatus.PRICE_RULE_NOT_EDIT.getMessage());
-            }
-
-
-            fareVersion = lastPriceRule.getFareVersion();
+        RLock lock = priceRuleLock(fareType);
+        if (!tryLock(lock, WRITE_LOCK_WAIT_SECONDS, TimeUnit.SECONDS, fareType)) {
+            return priceRuleBusy();
         }
-        priceRule.setFareVersion(++fareVersion);
+        try {
+            QueryWrapper<PriceRule> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("city_code",cityCode);
+            queryWrapper.eq("vehicle_type",vehicleType);
+            queryWrapper.orderByDesc("fare_version");
 
+            List<PriceRule> priceRules = priceRuleMapper.selectList(queryWrapper);
+            Integer fareVersion = 0;
+            if (priceRules.size()>0){
+                PriceRule lastPriceRule = priceRules.get(0);
+                Double unitPricePerMile = lastPriceRule.getUnitPricePerMile();
+                Double unitPricePerMinute = lastPriceRule.getUnitPricePerMinute();
+                Double startFare = lastPriceRule.getStartFare();
+                Integer startMile = lastPriceRule.getStartMile();
 
-        priceRuleMapper.insert(priceRule);
-        priceRuleCache.evict(fareType);
-        return ResponseResult.success();
+                if (unitPricePerMile.doubleValue() == priceRule.getUnitPricePerMile().doubleValue()
+                && unitPricePerMinute.doubleValue() == priceRule.getUnitPricePerMinute().doubleValue()
+                && startFare.doubleValue() == priceRule.getStartFare().doubleValue()
+                && startMile.intValue() == priceRule.getStartMile().intValue()){
+                    return ResponseResult.fail(CommonStatus.PRICE_RULE_NOT_EDIT.getCode(),CommonStatus.PRICE_RULE_NOT_EDIT.getMessage());
+                }
+
+                fareVersion = lastPriceRule.getFareVersion();
+            }
+            priceRule.setFareVersion(++fareVersion);
+
+            priceRuleMapper.insert(priceRule);
+            priceRuleCache.put(fareType, priceRule);
+            return ResponseResult.success();
+        } finally {
+            unlock(lock);
+        }
     }
 
 
@@ -124,21 +144,22 @@ public class PriceRuleService {
             return priceRuleNotExists();
         }//既没命中，也没有不存在的key，说明缓存击穿了，需要去数据库查找
 
-        QueryWrapper<PriceRule> queryWrapper = new QueryWrapper<>();
-        queryWrapper.eq("fare_type",fareType);
+        RLock lock = priceRuleLock(fareType);
+        if (!tryLock(lock, READ_LOCK_WAIT_MILLIS, TimeUnit.MILLISECONDS, fareType)) {
+            return loadLatestFromDatabase(fareType, false);
+        }
+        try {
+            cached = priceRuleCache.find(fareType);
+            if (cached.isHit()) {
+                return ResponseResult.success(cached.getPriceRule());
+            }
+            if (cached.isNotExists()) {
+                return priceRuleNotExists();
+            }
 
-        queryWrapper.orderByDesc("fare_version");
-        queryWrapper.last("LIMIT 1");
-
-        List<PriceRule> priceRules = priceRuleMapper.selectList(queryWrapper);
-
-        if (priceRules.size() > 0){
-            PriceRule priceRule = priceRules.get(0);
-            priceRuleCache.put(fareType, priceRule);
-            return ResponseResult.success(priceRule);
-        }else {
-            priceRuleCache.putNotExists(fareType);
-            return priceRuleNotExists();
+            return loadLatestFromDatabase(fareType, true);
+        } finally {
+            unlock(lock);
         }
 
 
@@ -147,6 +168,59 @@ public class PriceRuleService {
     private ResponseResult<PriceRule> priceRuleNotExists() {
         return ResponseResult.fail(CommonStatus.PRICE_RULE_NOT_EXISTS.getCode(),
                 CommonStatus.PRICE_RULE_NOT_EXISTS.getMessage());
+    }
+
+    private ResponseResult<PriceRule> priceRuleBusy() {
+        return ResponseResult.fail(CommonStatus.PRICE_RULE_BUSY.getCode(),
+                CommonStatus.PRICE_RULE_BUSY.getMessage());
+    }
+
+    private ResponseResult<PriceRule> loadLatestFromDatabase(String fareType, boolean cacheResult) {
+        QueryWrapper<PriceRule> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("fare_type", fareType);
+        queryWrapper.orderByDesc("fare_version");
+        queryWrapper.last("LIMIT 1");
+
+        List<PriceRule> priceRules = priceRuleMapper.selectList(queryWrapper);
+        if (priceRules.size() > 0) {
+            PriceRule priceRule = priceRules.get(0);
+            if (cacheResult) {
+                priceRuleCache.put(fareType, priceRule);
+            }
+            return ResponseResult.success(priceRule);
+        }
+        if (cacheResult) {
+            priceRuleCache.putNotExists(fareType);
+        }
+        return priceRuleNotExists();
+    }
+
+    private RLock priceRuleLock(String fareType) {
+        return redissonClient.getLock(PRICE_RULE_LOCK_PREFIX + fareType);
+    }
+
+    private boolean tryLock(RLock lock, long waitTime, TimeUnit unit, String fareType) {
+        try {
+            return lock.tryLock(waitTime, unit);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            log.warn("Price rule lock acquisition interrupted; fareType={}", fareType);
+            return false;
+        } catch (RuntimeException exception) {
+            log.warn("Price rule lock acquisition failed; fareType={}, reason={}",
+                    fareType, exception.getMessage());
+            return false;
+        }
+    }
+
+    private void unlock(RLock lock) {
+        try {
+            if (lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
+        } catch (RuntimeException exception) {
+            log.warn("Price rule distributed lock release failed; reason={}", exception.getMessage());
+        }
     }
 
 
