@@ -4,7 +4,6 @@ api-gateway / 8080
 api-passenger / 8081
 api-boss / 8087
 api-driver / 8088
-service-verificationCode / 8082
 service-passenger-user / 8083
 service-price / 8084
 service-map / 8085

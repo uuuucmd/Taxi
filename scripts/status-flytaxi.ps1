@@ -1,7 +1,6 @@
 $Ports = @(
     @{ Name = 'api-gateway'; Port = 8080 },
     @{ Name = 'api-passenger'; Port = 8081 },
-    @{ Name = 'service-verificationCode'; Port = 8082 },
     @{ Name = 'service-passenger-user'; Port = 8083 },
     @{ Name = 'service-price'; Port = 8084 },
     @{ Name = 'service-map'; Port = 8085 },

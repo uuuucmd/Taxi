@@ -1,18 +1,16 @@
 package com.flytaxi.apipassenger.service;
 
 import com.alibaba.nacos.common.utils.StringUtils;
-import com.auth0.jwt.JWT;
 import com.flytaxi.internalCommon.constant.CommonStatus;
 import com.flytaxi.internalCommon.constant.TokenConstant;
 import com.flytaxi.internalCommon.constant.UserIdentity;
 import com.flytaxi.internalCommon.dto.ResponseResult;
 import com.flytaxi.internalCommon.request.VerificationCodeDTO;
-import com.flytaxi.internalCommon.response.DataResponse;
 import com.flytaxi.internalCommon.response.TokenResponse;
 import com.flytaxi.internalCommon.util.JwtUtils;
 import com.flytaxi.internalCommon.util.RedisPrefixUtils;
+import com.flytaxi.internalCommon.util.VerificationCodeUtils;
 import com.flytaxi.apipassenger.remote.ServicePassengerUserClient;
-import com.flytaxi.apipassenger.remote.serviceVerificationCodeClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -27,10 +25,6 @@ import java.util.concurrent.TimeUnit;
  */
 @Service
 public class VerificationCodeService {
-
-    // This object is used to connect with the service part
-    @Autowired
-    private serviceVerificationCodeClient serviceClient;
 
     @Autowired
     private ServicePassengerUserClient userClient;
@@ -51,8 +45,7 @@ public class VerificationCodeService {
      */
     public ResponseResult generateCode (String passengerPhone) {
         // Obtain a verification code
-        ResponseResult<DataResponse> codeResponse = serviceClient.getResponse(6);
-        int codeNumber = codeResponse.getData().getNumberCode();
+        int codeNumber = VerificationCodeUtils.generate(6);
 
         String key = RedisPrefixUtils.generateKey(passengerPhone, UserIdentity.PASSENGER.getIdentity());
 

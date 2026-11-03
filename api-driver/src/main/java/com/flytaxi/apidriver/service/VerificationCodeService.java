@@ -1,16 +1,13 @@
 package com.flytaxi.apidriver.service;
 
-import com.flytaxi.apidriver.remote.ServiceVerificationcodeClient;
-
 import com.flytaxi.apidriver.remote.ServiceDriverUserClient;
 import com.flytaxi.internalCommon.constant.*;
 import com.flytaxi.internalCommon.dto.ResponseResult;
-import com.flytaxi.internalCommon.response.DataResponse;
 import com.flytaxi.internalCommon.response.DriverUserExistsResponse;
 import com.flytaxi.internalCommon.response.TokenResponse;
 import com.flytaxi.internalCommon.util.JwtUtils;
 import com.flytaxi.internalCommon.util.RedisPrefixUtils;
-import lombok.Data;
+import com.flytaxi.internalCommon.util.VerificationCodeUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,9 +25,6 @@ public class VerificationCodeService {
 
     @Autowired
     ServiceDriverUserClient serviceDriverUserClient;
-
-    @Autowired
-    ServiceVerificationcodeClient serviceVerificationcodeClient;
 
     // used to store the verification code in Redis
     @Autowired
@@ -59,9 +53,7 @@ public class VerificationCodeService {
         }
         log.info("Driver account exists for verification code request");
         // get VC
-        ResponseResult<DataResponse> numberCodeResult = serviceVerificationcodeClient.getNumberCode(6);
-        DataResponse numberCodeResponse = numberCodeResult.getData();
-        int verificationCode = numberCodeResponse.getNumberCode();
+        int verificationCode = VerificationCodeUtils.generate(6);
         log.debug("Generated driver verification code");
         // Call third party to generate verification code, third party: Ali SMS service, Tencent, Huaxin, Ronglian
 

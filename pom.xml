@@ -17,7 +17,6 @@
     <modules>
         <module>api-gateway</module>
         <module>api-passenger</module>
-        <module>service-verificationCode</module>
         <module>internal-common</module>
         <module>security-support-core</module>
         <module>security-support-session</module>

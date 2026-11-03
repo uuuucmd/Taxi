@@ -30,7 +30,7 @@ In the frontend driver workspace, register/bind a vehicle, resolve its current a
 
 ## System Architecture
 
-The platform follows a layered microservices architecture with 12 Spring Boot application modules and 3 shared libraries (15 child modules; 16 Maven projects including the root aggregator):
+The platform follows a layered microservices architecture with 11 Spring Boot application modules and 3 shared libraries (14 child modules; 15 Maven projects including the root aggregator):
 
 ```mermaid
 flowchart LR
@@ -59,7 +59,6 @@ flowchart LR
     subgraph Support["Support Services"]
         PU["service-passenger-user"]
         DU["service-driver-user"]
-        VC["service-verificationCode"]
     end
     subgraph External["External Systems"]
         AM["Amap API"]
@@ -80,11 +79,9 @@ flowchart LR
     AP --> O
     AP --> PR
     AP --> PU
-    AP --> VC
     AD --> O
     AD --> DU
     AD --> M
-    AD --> VC
     AD -- "Feign POST /push (payment prompt)" --> EV
     AB --> DU
     PR --> M
@@ -108,6 +105,7 @@ flowchart LR
 - `internal-common` is a shared library for DTOs, constants, and utility classes used by the API and business-service modules; `security-support-core` and `security-support-session` are intentionally independent.
 - `security-support-core` remains a framework-neutral skeleton for principal models, verification contracts, failure semantics, and test fixtures. It is not yet wired into existing applications.
 - `security-support-session` is a dependency-light skeleton for session validation, Bearer extraction, principal creation after session validation, and HTTP error mapping. It has no Spring Web or Redis adapter implementation yet and is not wired into existing applications.
+- Verification-code generation is performed inside the `api-passenger` and `api-driver` authentication flows through the shared `internal-common` utility; there is no standalone verification-code service.
 - MySQL-backed services include `service-price`, `service-order`, `service-driver-user`, `service-passenger-user`, and `service-map`.
 - Redis is used in `api-passenger`, `api-driver`, and `service-order` for token/code storage, blacklist checks, and coordination-related runtime state. `api-driver` currently uses Boot Redis defaults because it lacks `spring.redis` configuration.
 
@@ -154,7 +152,6 @@ flowchart LR
 | `service-map` | 8085 | Map integration — route, trace, point, and district integration through Amap |
 | `service-driver-user` | 8086 | Driver/vehicle records, availability/work status, and bindings |
 | `service-passenger-user` | 8083 | Passenger registration and profile lookup |
-| `service-verificationCode` | 8082 | Random verification code generation, used by passenger and driver APIs |
 | `service-pay` | 9001 | Alipay sandbox payment-page/callback adapter; protected passenger-edge entry planned |
 | `service-sse-push` | 9000 | Client-facing SSE connect/close endpoints plus an HTTP push relay; subject/service authorization and lifecycle hardening planned |
 | `internal-common` | — | Shared library — DTOs, utilities, constants (no web server) |
@@ -167,7 +164,7 @@ flowchart LR
 
 ### Test Automation — 171 CI-verified tests across 25 test classes
 
-The CI pipeline runs root-level `mvn test` across the full set of 15 child modules plus the root aggregator. The repository currently has 171 CI-verified tests: 161 unit-style tests and 10 lightweight HTTP contract tests. None require a full Spring application context or external MySQL, Redis, or Nacos infrastructure. MockMvc verifies the server-side controller contract, while WireMock exercises OpenFeign client HTTP methods, paths, query and path parameters, JSON bodies, content types, and response decoding. These tests currently live in `internal-common`, `api-passenger`, `service-price`, `service-order`, `service-map`, `security-support-core`, and `security-support-session`; modules without test classes still participate in the reactor and will automatically be covered as tests are added later.
+The CI pipeline runs root-level `mvn test` across the full set of 14 child modules plus the root aggregator. The repository currently has 171 CI-verified tests: 161 unit-style tests and 10 lightweight HTTP contract tests. None require a full Spring application context or external MySQL, Redis, or Nacos infrastructure. MockMvc verifies the server-side controller contract, while WireMock exercises OpenFeign client HTTP methods, paths, query and path parameters, JSON bodies, content types, and response decoding. These tests currently live in `internal-common`, `api-passenger`, `service-price`, `service-order`, `service-map`, `security-support-core`, and `security-support-session`; modules without test classes still participate in the reactor and will automatically be covered as tests are added later.
 
 | Test Class | Module | Tests | What It Covers |
 |-----------|--------|-------|----------------|
@@ -212,7 +209,7 @@ During testing, we discovered a **half-cent rounding bug** in the pricing calcul
 Every pull request targeting `master` and every push to `master` triggers automated testing:
 
 1. **Build** — `mvn clean install -DskipTests` (build and install the 15-project Maven reactor)
-2. **Test** — `mvn test` (run root-level tests across the 15 child modules and the root aggregator)
+2. **Test** — `mvn test` (run root-level tests across the 14 child modules and the root aggregator)
 
 The 171 tests currently include 161 unit-style tests and 10 lightweight contract tests in `internal-common`, `api-passenger`, `service-price`, `service-order`, `service-map`, `security-support-core`, and `security-support-session`. The remaining modules do not have test classes yet; they still participate in the Maven reactor and will be included automatically as tests are added later. Integration tests against live infrastructure such as MySQL, Redis, and Nacos remain future work.
 

@@ -26,7 +26,7 @@ Get-ChildItem $PidRoot -Filter '*.pid' | ForEach-Object {
     Remove-Item $_.FullName -Force
 }
 
-$AppPorts = 8081, 8082, 8083, 8084, 8085, 8086, 8087, 8088, 8089, 9000, 9001
+$AppPorts = 8081, 8083, 8084, 8085, 8086, 8087, 8088, 8089, 9000, 9001
 foreach ($port in $AppPorts) {
     $connections = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
     foreach ($connection in $connections) {

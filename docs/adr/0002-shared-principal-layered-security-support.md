@@ -29,10 +29,10 @@ and one stable dependency boundary:
 - `internal-common` already carries broad cross-service DTO and utility
   responsibilities and is scheduled for later slimming under ARCH-01.
 
-The current `service-verificationCode` module remains an independently
-deployable HTTP service on port 8082. It exposes `GET /numberCode/{size}` and is
-called remotely by both passenger and driver edges. While that service remains
-independent, it is part of the internal service-authentication boundary.
+> Update: `service-verificationCode` has since been absorbed into the
+> `api-passenger` and `api-driver` authentication flows; code generation now
+> lives in the shared `internal-common` library. The original decision below is
+> retained as historical context.
 
 The architecture therefore needs a shared principal vocabulary without turning
 every consumer into a Redis-aware web application or creating an open-ended

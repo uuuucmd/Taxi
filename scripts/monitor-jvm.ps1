@@ -3,7 +3,7 @@ param(
     [int]$Count = 0,
     [string]$CsvPath = '',
     [switch]$Clear,
-    [int[]]$Ports = @(8080, 8081, 8082, 8083, 8084, 8085, 8086, 8087, 8088, 8089, 9000, 9001)
+    [int[]]$Ports = @(8080, 8081, 8083, 8084, 8085, 8086, 8087, 8088, 8089, 9000, 9001)
 )
 
 $ErrorActionPreference = 'Stop'
@@ -17,7 +17,6 @@ $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
 $NameByPort = @{
     8080 = 'api-gateway'
     8081 = 'api-passenger'
-    8082 = 'service-verificationCode'
     8083 = 'service-passenger-user'
     8084 = 'service-price'
     8085 = 'service-map'

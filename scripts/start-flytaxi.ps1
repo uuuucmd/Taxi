@@ -135,7 +135,6 @@ try {
 }
 
 $Services = @(
-    @{ Name = 'service-verificationCode'; Module = 'service-verificationCode'; Port = 8082; Args = '' },
     @{ Name = 'service-passenger-user'; Module = 'service-passenger-user'; Port = 8083; Args = '' },
     @{ Name = 'service-driver-user'; Module = 'service-driver-user'; Port = 8086; Args = '' },
     @{ Name = 'service-price'; Module = 'service-price'; Port = 8084; Args = '' },
