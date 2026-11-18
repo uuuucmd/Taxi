@@ -153,8 +153,9 @@ public class OrderInfoController {
     }
 
     @GetMapping("/driver-orders")
-    public ResponseResult<List<OrderInfo>> driverOrders(@RequestParam("driverPhone") String driverPhone) {
-        return orderInfoService.driverOrders(driverPhone);
+    public ResponseResult<List<OrderInfo>> driverOrders(@RequestParam("driverPhone") String driverPhone,
+                                                        @RequestParam(value = "radiusKm", required = false) Double radiusKm) {
+        return orderInfoService.driverOrders(driverPhone, radiusKm);
     }
 
     @PostMapping("/accept")

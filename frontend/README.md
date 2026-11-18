@@ -62,6 +62,12 @@ should include a city and a specific location. Unresolved or ambiguous addresses
 an error rather than using preset coordinates. Editing either address or the vehicle
 type clears the previous estimate; click the estimate button to recalculate.
 
+Both the origin and destination fields also support map selection. Clicking a point in
+the Amap picker resolves the address, district code, and city code on that user action,
+then uses those coordinates directly for fare estimation and order creation. The picker
+does not poll or call reverse geocoding continuously; configure `VITE_AMAP_JS_KEY` and
+`VITE_AMAP_SECURITY_CODE` in the repository `.env`/`.env.local`.
+
 ## Driver Orders
 
 The driver order screen loads the signed-in driver's latest 100 assigned orders
@@ -69,6 +75,13 @@ through `/api/driver/order/list`. Drivers select a route from the pending or fin
 list; order and driver identifiers are kept internal. Available trip actions follow
 the order status, and successful actions refresh the list. The driver API derives
 the phone from the login token and checks order ownership before changing a trip.
+
+The order hall and workbench also expose a nearby-distance filter. Selecting a
+radius sends `radiusKm` to `/api/driver/order/list`; the backend measures the
+straight-line distance from the driver's last reported position to each pending
+order's departure point. This filtering does not call the Amap route or around
+search APIs. The driver must report a position before the radius filter can be
+applied.
 
 ## Admin Driver Directory
 
@@ -81,6 +94,23 @@ Select the edit action to update a driver via the existing `PUT /driver-user`
 endpoint. Adding a driver returns to the list. The current admin API has no
 admin authentication; keep it on the trusted local network until access controls
 are implemented.
+
+## Admin Passenger Directory
+
+The admin passenger page uses `GET /api/boss/passenger-users` with `page`,
+`pageSize`, optional `keyword` (name or phone), and optional `state`
+(0 normal, 1 disabled). The backend returns `records`, `total`, `page`, and
+`pageSize`; page sizes are limited to 100. The directory supports server-side
+search and pagination for large passenger datasets.
+
+The current admin API has no admin authentication; keep it on the trusted local
+network until access controls are implemented.
+
+Administrators can enable or disable a passenger with
+`PUT /api/boss/passenger-user/state?passengerPhone=<phone>&state=<0|1>`, where
+0 means normal and 1 means disabled. Disabling an account also revokes its
+existing access and refresh tokens; disabled accounts are rejected on the next
+verification-code login.
 
 ## Dispatch Readiness
 
@@ -97,12 +127,12 @@ default (`LOCAL_SIMULATION=true`); dispatch searches vehicle positions in Redis,
 then checks vehicle city, enabled state, type, driver work status, and ongoing
 orders. No driver or vehicle is activated automatically by an order request.
 
-The driver's vehicle panel reloads the signed-in account's vehicle before every
-location upload. An unbound account shows a lock form for an existing plate and a
-new-vehicle registration form, and does not upload a placeholder vehicle ID. The
-upload API derives the vehicle from the driver's token
-and active binding. Location timestamps use fresh epoch milliseconds when the
-optional time field is empty; storage failures are not reported as success.
+The driver's vehicle panel manages vehicle locking and registration only. Live
+position uploads happen from the driver workbench and are the source for the
+nearby-order filter. An unbound account shows a lock form for an existing plate
+and a new-vehicle registration form. The upload API derives the vehicle from the
+driver's token and active binding. The workbench uses fresh epoch milliseconds
+for each upload; storage failures are not reported as success.
 
 Drivers can lock an existing enabled, unbound vehicle by entering its plate in the
 vehicle panel. The server derives the driver from the token, locks the vehicle row,
@@ -118,10 +148,10 @@ Keep `AMAP_KEY` configured for address resolution and ordinary driving routes.
 `AMAP_SID`, terminal IDs, and trace IDs are not required in the default local
 mode. Both driver and admin vehicle registration skip Amap track provisioning.
 
-In the driver vehicle panel, enter a detailed location and select the location
-action, then save the simulated position. Manual coordinates remain available.
-Start work before placing a nearby passenger order. Local dispatch searches
-within 1, 3, and 5 km, nearest first. Coordinates always use longitude,latitude.
+In the driver workbench, choose a preset or map point and report the simulated
+position. The vehicle panel does not upload positions. Start work before placing
+a nearby passenger order. Local dispatch searches within 1, 3, and 5 km, nearest
+first. Coordinates always use longitude,latitude.
 Positions expire from dispatch after `LOCAL_LOCATION_TTL_SECONDS` (default 1800
 seconds); upload a fresh position when testing after this interval. Older uploads
 cannot replace a newer position, and invalid batches are rejected before writing.

@@ -108,8 +108,9 @@ export const driverApi = {
   initializeVehicleMap() {
     return request('/api/driver', '/vehicle/map', withAuth('driver', { method: 'POST' }))
   },
-  orders() {
-    return request('/api/driver', '/order/list', withAuth('driver'))
+  orders(radiusKm) {
+    const query = radiusKm ? `?radiusKm=${encodeURIComponent(radiusKm)}` : ''
+    return request('/api/driver', `/order/list${query}`, withAuth('driver'))
   },
   orderDetail(orderId) {
     return request('/api/driver', `/order/${encodeURIComponent(orderId)}`, withAuth('driver'))
@@ -158,6 +159,16 @@ export const bossApi = {
     if (keyword.trim()) params.set('keyword', keyword.trim())
     if (state !== '') params.set('state', String(state))
     return request('/api/boss', `/driver-users?${params}`, withAuth('boss'))
+  },
+  passengers({ page = 1, pageSize = 10, keyword = '', state = '' } = {}) {
+    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
+    if (keyword.trim()) params.set('keyword', keyword.trim())
+    if (state !== '') params.set('state', String(state))
+    return request('/api/boss', `/passenger-users?${params}`, withAuth('boss'))
+  },
+  updatePassengerState(passengerPhone, state) {
+    const params = new URLSearchParams({ passengerPhone, state: String(state) })
+    return request('/api/boss', `/passenger-user/state?${params}`, withAuth('boss', { method: 'PUT' }))
   },
   addDriver(body) {
     return request('/api/boss', '/driver-user', withAuth('boss', { method: 'POST', body }))

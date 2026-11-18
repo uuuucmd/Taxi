@@ -24,8 +24,9 @@ public class OrderController {
     ApiDriverOrderInfoService apiDriverOrderInfoService;
 
     @GetMapping("/list")
-    public ResponseResult list(HttpServletRequest request) {
-        return withDriver(request, apiDriverOrderInfoService::driverOrders);
+    public ResponseResult list(@RequestParam(value = "radiusKm", required = false) Double radiusKm,
+                               HttpServletRequest request) {
+        return withDriver(request, phone -> apiDriverOrderInfoService.driverOrders(phone, radiusKm));
     }
 
     @GetMapping("/{orderId}")

@@ -22,3 +22,10 @@ logging:
 
 taxi:
   local-simulation: "${LOCAL_SIMULATION:true}"
+
+feign:
+  client:
+    config:
+      service-sse-push:
+        connectTimeout: "${SSE_PUSH_CONNECT_TIMEOUT_MS:500}"
+        readTimeout: "${SSE_PUSH_READ_TIMEOUT_MS:1000}"

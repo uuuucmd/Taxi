@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
   ArrowRight,
   CalendarDays,
@@ -17,8 +17,10 @@ import {
   ShieldCheck,
   UserRound,
 } from 'lucide-vue-next'
+import AmapLocationPicker from './AmapLocationPicker.vue'
 import WorkspaceShell from './WorkspaceShell.vue'
 import { passengerApi } from '../services/api'
+import { subscribeSse } from '../services/sse'
 
 const props = defineProps({ identity: { type: String, required: true } })
 const emit = defineEmits(['logout'])
@@ -27,9 +29,15 @@ const active = ref('ride')
 const busy = ref(false)
 const currentLoading = ref(false)
 const currentOrder = ref(null)
+const paying = ref(false)
 const estimate = ref(null)
 const resolvedTrip = ref(null)
 const feedback = reactive({ type: '', text: '' })
+const showMapPicker = ref(false)
+const mapTarget = ref('origin')
+const mapPoint = reactive({ longitude: null, latitude: null })
+const pickedPoints = reactive({ origin: null, destination: null })
+let unsubscribeSse
 
 const navItems = [
   { id: 'ride', label: '立即叫车', icon: Route },
@@ -49,7 +57,26 @@ const vehicleTypes = [
   { id: '3', name: '商务型', description: '品质服务' },
 ]
 
-const currentStatus = computed(() => currentOrder.value?.orderStatus ?? currentOrder.value?.status ?? '待命中')
+const statusLabels = {
+  1: '等待派单',
+  2: '司机已接单',
+  3: '司机前往接驾',
+  4: '司机已到达',
+  5: '行程中',
+  6: '行程结束，待支付',
+  7: '待支付',
+  8: '已支付',
+  9: '已取消',
+  10: '费用计算中',
+  11: '结算异常',
+}
+
+const currentStatus = computed(() => {
+  const status = currentOrder.value?.orderStatus ?? currentOrder.value?.status
+  return statusLabels[Number(status)] || status || '待命中'
+})
+const paymentReady = computed(() => [6, 7].includes(Number(currentOrder.value?.orderStatus)))
+const mapTargetLabel = computed(() => mapTarget.value === 'origin' ? '出发地' : '目的地')
 const greeting = computed(() => {
   const hour = new Date().getHours()
   if (hour < 11) return '早上好'
@@ -69,6 +96,11 @@ function notify(text, type = 'success') {
     feedback.text = ''
     feedback.type = ''
   }, 4200)
+}
+
+function formatPrice(value) {
+  const amount = Number(value)
+  return Number.isFinite(amount) ? amount.toFixed(2) : '--'
 }
 
 function routeLabel(order) {
@@ -102,6 +134,60 @@ async function loadCurrentOrder() {
   }
 }
 
+function openMapPicker(target) {
+  mapTarget.value = target
+  const picked = pickedPoints[target]
+  const resolved = target === 'origin' ? resolvedTrip.value?.origin : resolvedTrip.value?.destination
+  mapPoint.longitude = picked?.longitude ?? resolved?.longitude ?? null
+  mapPoint.latitude = picked?.latitude ?? resolved?.latitude ?? null
+  showMapPicker.value = true
+}
+
+function applyMapPick(point) {
+  const target = mapTarget.value
+  const label = mapTargetLabel.value
+  if (!point.address || !point.districtCode || !point.cityCode) {
+    notify(`${label}地址解析失败，请重新选点或手动输入地址`, 'error')
+    return
+  }
+
+  const picked = {
+    longitude: Number(point.longitude).toFixed(6),
+    latitude: Number(point.latitude).toFixed(6),
+    address: point.address.trim(),
+    districtCode: point.districtCode,
+    cityCode: point.cityCode,
+  }
+  pickedPoints[target] = picked
+  trip[target] = picked.address
+  mapPoint.longitude = picked.longitude
+  mapPoint.latitude = picked.latitude
+  estimate.value = null
+  resolvedTrip.value = null
+  notify(`${label}已从地图选择`)
+}
+
+function handleMapError(message) {
+  if (message) notify(message, 'error')
+}
+
+async function payCurrentOrder() {
+  const orderId = currentOrder.value?.orderId || currentOrder.value?.id
+  if (paying.value || !orderId || !paymentReady.value) return
+
+  paying.value = true
+  try {
+    await passengerApi.payOrder(orderId)
+    notify('支付完成，订单已结束')
+    await loadCurrentOrder()
+  } catch (error) {
+    if (error.status === 401) return emit('logout')
+    notify(error.message || '支付失败，请稍后重试', 'error')
+  } finally {
+    paying.value = false
+  }
+}
+
 async function geocode(address, label) {
   const data = responseData(await passengerApi.geocode(address))
   if (!data?.longitude || !data?.latitude || !data?.cityCode || !data?.districtCode) {
@@ -110,14 +196,20 @@ async function geocode(address, label) {
   return data
 }
 
+async function resolvePoint(target, address, label) {
+  const picked = pickedPoints[target]
+  if (picked && picked.address === address) return picked
+  return geocode(address, label)
+}
+
 async function resolveTrip() {
   const originText = trip.origin.trim()
   const destinationText = trip.destination.trim()
   if (!originText || !destinationText) throw new Error('请填写出发地和目的地')
   if (originText === destinationText) throw new Error('出发地和目的地不能相同')
 
-  const origin = await geocode(originText, '出发地')
-  const destination = await geocode(destinationText, '目的地')
+  const origin = await resolvePoint('origin', originText, '出发地')
+  const destination = await resolvePoint('destination', destinationText, '目的地')
   const resolved = {
     origin,
     destination,
@@ -198,7 +290,22 @@ watch(
   },
 )
 
-onMounted(loadCurrentOrder)
+watch(active, (value) => {
+  if (value === 'ride' || value === 'trips') loadCurrentOrder()
+})
+
+onMounted(() => {
+  loadCurrentOrder()
+  unsubscribeSse = subscribeSse('passenger', event => {
+    if (['order.accepted', 'order.status', 'order.cancelled', 'order.paid', 'pay.info'].includes(event.type)) {
+      loadCurrentOrder()
+    }
+  })
+})
+
+onBeforeUnmount(() => {
+  if (unsubscribeSse) unsubscribeSse()
+})
 </script>
 
 <template>
@@ -233,15 +340,39 @@ onMounted(loadCurrentOrder)
           </header>
 
           <div class="route-form">
-            <label class="location-field">
-              <span class="location-marker start"><LocateFixed :size="17" /></span>
-              <span class="location-copy"><small>出发地</small><input v-model="trip.origin" placeholder="输入上车地点" /></span>
-            </label>
+            <div class="location-row">
+              <label class="location-field">
+                <span class="location-marker start"><LocateFixed :size="17" /></span>
+                <span class="location-copy"><small>出发地</small><input v-model="trip.origin" placeholder="输入上车地点" /></span>
+              </label>
+              <button class="map-pick-button" type="button" @click="openMapPicker('origin')">
+                <MapPin :size="15" /><span>地图选点</span>
+              </button>
+            </div>
             <span class="route-line"></span>
-            <label class="location-field">
-              <span class="location-marker end"><MapPin :size="17" /></span>
-              <span class="location-copy"><small>目的地</small><input v-model="trip.destination" placeholder="输入下车地点" /></span>
-            </label>
+            <div class="location-row">
+              <label class="location-field">
+                <span class="location-marker end"><MapPin :size="17" /></span>
+                <span class="location-copy"><small>目的地</small><input v-model="trip.destination" placeholder="输入下车地点" /></span>
+              </label>
+              <button class="map-pick-button" type="button" @click="openMapPicker('destination')">
+                <MapPin :size="15" /><span>地图选点</span>
+              </button>
+            </div>
+          </div>
+
+          <div v-if="showMapPicker" class="passenger-map-picker">
+            <div class="passenger-map-heading">
+              <span><MapPin :size="15" />选择{{ mapTargetLabel }}</span>
+              <button type="button" @click="showMapPicker = false">收起地图</button>
+            </div>
+            <AmapLocationPicker
+              :longitude="mapPoint.longitude"
+              :latitude="mapPoint.latitude"
+              resolve-address
+              @pick="applyMapPick"
+              @error="handleMapError"
+            />
           </div>
 
           <div class="vehicle-section">
@@ -294,6 +425,14 @@ onMounted(loadCurrentOrder)
                 <span><Clock3 :size="14" />行程进行中</span>
                 <span><CarFront :size="14" />司机匹配中</span>
               </div>
+              <div v-if="paymentReady" class="trip-payment">
+                <span>行程已结束，账单 ¥ {{ formatPrice(currentOrder.price) }}</span>
+                <button class="primary-action compact" type="button" :disabled="paying" @click="payCurrentOrder()">
+                  <LoaderCircle v-if="paying" class="spin" :size="16" />
+                  <CreditCard v-else :size="16" />
+                  {{ paying ? '支付处理中...' : '去支付' }}
+                </button>
+              </div>
             </template>
             <div v-else class="empty-trip">
               <span class="empty-icon"><CheckCircle2 :size="22" /></span>
@@ -321,7 +460,15 @@ onMounted(loadCurrentOrder)
           <div class="trip-detail-grid">
             <div><span>订单编号</span><strong>{{ currentOrder.orderId || currentOrder.id || '待生成' }}</strong></div>
             <div><span>车型</span><strong>{{ vehicleTypes.find((item) => item.id === String(currentOrder.vehicleType))?.name || '标准车型' }}</strong></div>
-            <div><span>预估费用</span><strong>{{ currentOrder.price ? `¥ ${currentOrder.price}` : '以最终账单为准' }}</strong></div>
+            <div><span>预估费用</span><strong>{{ currentOrder.price != null ? `¥ ${formatPrice(currentOrder.price)}` : '以最终账单为准' }}</strong></div>
+          </div>
+          <div v-if="paymentReady" class="trip-detail-payment">
+            <div><strong>行程已结束，等待支付</strong><span>应付 ¥ {{ formatPrice(currentOrder.price) }}</span></div>
+            <button class="primary-action compact" type="button" :disabled="paying" @click="payCurrentOrder()">
+              <LoaderCircle v-if="paying" class="spin" :size="16" />
+              <CreditCard v-else :size="16" />
+              {{ paying ? '支付处理中...' : '去支付' }}
+            </button>
           </div>
         </div>
         <div v-else class="large-empty"><History :size="34" /><h3>还没有进行中的行程</h3><p>新的行程会在这里持续更新状态。</p><button class="primary-action compact" type="button" @click="active = 'ride'"><Navigation :size="16" />发起行程</button></div>
@@ -364,8 +511,17 @@ onMounted(loadCurrentOrder)
 .panel-heading h2 { margin: 0; font-size: 21px; line-height: 1.2; font-weight: 650; }
 .panel-icon { width: 40px; height: 40px; justify-content: center; color: #0f8b7f; background: #e7f2ef; border-radius: 5px; }
 .route-form { margin-top: 30px; position: relative; display: grid; gap: 12px; }
+.location-row { display: flex; align-items: stretch; gap: 8px; }
+.location-row .location-field { flex: 1; min-width: 0; }
 .location-field { min-height: 62px; display: flex; align-items: center; gap: 12px; padding: 9px 13px; background: #f7f5ef; border: 1px solid #dfdbd0; border-radius: 6px; }
 .location-field:focus-within { border-color: #0f8b7f; box-shadow: 0 0 0 3px rgba(15, 139, 127, .08); }
+.map-pick-button { min-width: 92px; flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 12px; color: #38695b; background: #eef6f3; border: 1px solid #cfe1da; border-radius: 6px; font-size: 10px; font-weight: 650; }
+.map-pick-button:hover { border-color: #8fb8aa; background: #e3f1eb; }
+.passenger-map-picker { margin-top: 14px; }
+.passenger-map-picker :deep(.amap-picker) { margin-top: 0; }
+.passenger-map-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; color: #59635d; font-size: 10px; font-weight: 650; }
+.passenger-map-heading span { display: flex; align-items: center; gap: 6px; }
+.passenger-map-heading button { min-height: 30px; padding: 0 9px; color: #6a736d; background: #f2efe7; border: 1px solid #d8d3c8; border-radius: 4px; font-size: 9px; }
 .location-marker { width: 31px; height: 31px; flex: none; display: grid; place-items: center; border-radius: 50%; }
 .location-marker.start { color: #0f8b7f; background: #dff0ec; }
 .location-marker.end { color: #c8463a; background: #f6e5e2; }
@@ -407,6 +563,9 @@ onMounted(loadCurrentOrder)
 .trip-route { margin: 12px 0 17px; color: #333d38; font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
 .trip-meta { justify-content: space-between; gap: 8px; padding-top: 14px; border-top: 1px solid #e5e0d6; color: #7c847f; font-size: 9px; }
 .trip-meta span { display: flex; align-items: center; gap: 5px; }
+.trip-payment { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5e0d6; }
+.trip-payment > span { color: #756648; font-size: 9px; line-height: 1.5; }
+.trip-payment button { flex: none; }
 .empty-trip { min-height: 210px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
 .empty-icon { width: 45px; height: 45px; display: grid; place-items: center; color: #0f8b7f; background: #e8f3f0; border-radius: 50%; }
 .empty-trip strong { margin-top: 13px; font-size: 12px; }
@@ -431,6 +590,10 @@ onMounted(loadCurrentOrder)
 .trip-detail-grid span, .trip-detail-grid strong { display: block; }
 .trip-detail-grid span { color: #8b928d; font-size: 9px; }
 .trip-detail-grid strong { margin-top: 6px; color: #303a35; font-size: 11px; font-weight: 650; overflow-wrap: anywhere; }
+.trip-detail-payment { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 17px 19px; background: #fbf4e7; border-top: 1px solid #e5d9c2; }
+.trip-detail-payment div { display: grid; gap: 4px; }
+.trip-detail-payment strong { color: #4e4128; font-size: 11px; }
+.trip-detail-payment span { color: #7f6c4c; font-size: 9px; }
 .large-empty { min-height: 420px; flex-direction: column; justify-content: center; text-align: center; color: #9aa19c; }
 .large-empty h3 { margin: 15px 0 0; color: #303a35; font-size: 17px; }
 .large-empty p { margin: 8px 0 20px; color: #858d88; font-size: 11px; }
@@ -457,6 +620,8 @@ onMounted(loadCurrentOrder)
 @media (max-width: 700px) {
   .page-intro { align-items: flex-start; flex-direction: column; }
   .service-state { align-self: flex-start; }
+  .map-pick-button { min-width: 44px; padding: 0 10px; }
+  .map-pick-button span { display: none; }
   .vehicle-picker { grid-template-columns: 1fr; }
   .vehicle-picker button { min-height: 60px; }
   .trip-side, .account-grid { grid-template-columns: 1fr; }
@@ -470,6 +635,8 @@ onMounted(loadCurrentOrder)
   .ride-panel, .current-trip-panel, .content-panel, .profile-panel { padding: 18px 15px; }
   .ride-actions { flex-direction: column-reverse; }
   .ride-actions button { width: 100%; }
+  .trip-payment, .trip-detail-payment { align-items: flex-start; flex-direction: column; }
+  .trip-payment button, .trip-detail-payment button { width: 100%; }
   .fare-summary { align-items: flex-start; flex-direction: column; }
   .workspace-toast { top: 72px; right: 12px; left: 12px; max-width: none; }
 }

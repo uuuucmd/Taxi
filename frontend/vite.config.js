@@ -8,6 +8,7 @@ const proxy = (target) => ({
 })
 
 export default defineConfig({
+  envDir: '..',
   plugins: [vue()],
   server: {
     host: '0.0.0.0',
@@ -16,6 +17,11 @@ export default defineConfig({
       '/api/passenger': proxy('http://localhost:8081'),
       '/api/driver': proxy('http://localhost:8088'),
       '/api/boss': proxy('http://localhost:8087'),
+      '/api/sse': {
+        target: 'http://localhost:9000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/sse/, ''),
+      },
     },
   },
 })

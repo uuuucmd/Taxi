@@ -1,5 +1,8 @@
 server:
   port: 9000
+  tomcat:
+    threads:
+      max: 500
 
 spring:
   config:
@@ -13,3 +16,23 @@ spring:
         server-addr: "${NACOS_SERVER_ADDR:localhost:8848}"
         username: "${NACOS_USERNAME:nacos}"
         password: "${NACOS_PASSWORD:}"
+  redis:
+    host: "${REDIS_HOST:localhost}"
+    port: "${REDIS_PORT:6379}"
+    database: "${REDIS_DATABASE:0}"
+
+sse:
+  timeout-ms: "${SSE_TIMEOUT_MS:1800000}"
+  heartbeat-ms: "${SSE_HEARTBEAT_MS:20000}"
+  channel: "${SSE_REDIS_CHANNEL:sse:push}"
+
+feign:
+  client:
+    config:
+      default:
+        connectTimeout: "${SSE_FEIGN_CONNECT_TIMEOUT_MS:1000}"
+        readTimeout: "${SSE_FEIGN_READ_TIMEOUT_MS:2000}"
+
+logging:
+  level:
+    root: INFO

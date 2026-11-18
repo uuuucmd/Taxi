@@ -276,6 +276,7 @@ public class OrderInfoService {
             }
             log.info("Order created; orderId={}, status={}, result=success",
                     orderInfo.getId(), OrderConstant.ORDER_START);
+            broadcastOrderCreated(orderInfo);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             return ResponseResult.fail(CommonStatus.ORDER_CREATE_BUSY.getCode(),
@@ -327,6 +328,67 @@ public class OrderInfoService {
 
     private ResponseResult orderCreated(OrderInfo orderInfo) {
         return ResponseResult.success(orderInfo.getId() == null ? null : orderInfo.getId().toString());
+    }
+
+    private void pushEvent(Long userId, String identity, String event, JSONObject content) {
+        if (userId == null) {
+            return;
+        }
+        PushRequest pushRequest = new PushRequest();
+        pushRequest.setUserId(userId);
+        pushRequest.setIdentity(identity);
+        pushRequest.setEvent(event);
+        pushRequest.setContent(content == null ? "{}" : content.toString());
+        try {
+            serviceSsePushClient.push(pushRequest);
+        } catch (RuntimeException exception) {
+            log.warn("SSE push failed; userId={}, identity={}, event={}, error={}",
+                    userId, identity, event, exception.getClass().getSimpleName());
+        }
+    }
+
+    private void broadcastEvent(String identity, String event, JSONObject content) {
+        PushRequest pushRequest = new PushRequest();
+        pushRequest.setIdentity(identity);
+        pushRequest.setEvent(event);
+        pushRequest.setContent(content == null ? "{}" : content.toString());
+        try {
+            serviceSsePushClient.push(pushRequest);
+        } catch (RuntimeException exception) {
+            log.warn("SSE broadcast failed; identity={}, event={}, error={}",
+                    identity, event, exception.getClass().getSimpleName());
+        }
+    }
+
+    private void broadcastOrderCreated(OrderInfo orderInfo) {
+        JSONObject content = new JSONObject();
+        content.put("orderId", orderInfo.getId());
+        content.put("orderStatus", OrderConstant.ORDER_START);
+        content.put("departure", orderInfo.getDeparture());
+        content.put("destination", orderInfo.getDestination());
+        content.put("vehicleType", orderInfo.getVehicleType());
+        content.put("address", orderInfo.getAddress());
+        content.put("orderTime", orderInfo.getOrderTime());
+        broadcastEvent(UserIdentity.DRIVER.getIdentity(), "order.created", content);
+    }
+
+    private void pushOrderAccepted(OrderInfo orderInfo, OrderDriverResponse driver, Car car) {
+        JSONObject content = new JSONObject();
+        content.put("orderId", orderInfo.getId());
+        content.put("orderStatus", OrderConstant.DRIVER_RECEIVE_ORDER);
+        content.put("driverId", driver.getDriverId());
+        content.put("driverPhone", driver.getDriverPhone());
+        content.put("licenseId", driver.getLicenseId());
+        content.put("vehicleNo", driver.getVehicleNo());
+        if (car != null) {
+            content.put("brand", car.getBrand());
+            content.put("model", car.getModel());
+            content.put("vehicleColor", car.getVehicleColor());
+        }
+        content.put("receiveOrderCarLongitude", orderInfo.getDepLongitude());
+        content.put("receiveOrderCarLatitude", orderInfo.getDepLatitude());
+        pushEvent(orderInfo.getPassengerId(), UserIdentity.PASSENGER.getIdentity(),
+                "order.accepted", content);
     }
 
     private String orderRequestFingerprint(OrderRequest request) {
@@ -919,6 +981,13 @@ public class OrderInfoService {
                     cancelled++;
                     log.info("Order status changed; action=accept_timeout, orderId={}, fromStatus={}, toStatus={}, result=success",
                             expiredOrder.getId(), OrderConstant.ORDER_START, OrderConstant.ORDER_CANCEL);
+                    JSONObject content = new JSONObject();
+                    content.put("orderId", expiredOrder.getId());
+                    content.put("orderStatus", OrderConstant.ORDER_CANCEL);
+                    content.put("cancelTypeCode", OrderConstant.CANCEL_PLATFORM_BEFORE);
+                    content.put("reason", "accept_timeout");
+                    pushEvent(expiredOrder.getPassengerId(), UserIdentity.PASSENGER.getIdentity(),
+                            "order.cancelled", content);
                 }
             } catch (RuntimeException exception) {
                 log.warn("Unaccepted order timeout cancellation failed; orderId={}, exceptionType={}",
@@ -1084,6 +1153,14 @@ public class OrderInfoService {
         log.info("Order status changed; action=finalization_complete, orderId={}, fromStatus={}, toStatus={}, attempt={}, result=success",
                 orderInfo.getId(), OrderConstant.FINALIZATION_PENDING,
                 OrderConstant.PASSENGER_GETOFF, attempt);
+        JSONObject content = new JSONObject();
+        content.put("orderId", orderInfo.getId());
+        content.put("orderStatus", OrderConstant.PASSENGER_GETOFF);
+        content.put("price", price);
+        pushEvent(orderInfo.getPassengerId(), UserIdentity.PASSENGER.getIdentity(),
+                "order.status", content);
+        pushEvent(orderInfo.getDriverId(), UserIdentity.DRIVER.getIdentity(),
+                "order.status", content);
         return ResponseResult.success();
     }
 
@@ -1463,6 +1540,11 @@ public class OrderInfoService {
         if (updated == 1) {
             log.info("Order status changed; action={}, orderId={}, fromStatus={}, toStatus={}, result=success",
                     action, orderId, expectedStatus, targetStatus);
+            JSONObject content = new JSONObject();
+            content.put("orderId", orderId);
+            content.put("orderStatus", targetStatus);
+            pushEvent(currentOrder.getPassengerId(), UserIdentity.PASSENGER.getIdentity(),
+                    "order.status", content);
             return ResponseResult.success();
         }
         OrderInfo latestOrder = orderInfoMapper.selectById(orderId);
@@ -1549,6 +1631,13 @@ public class OrderInfoService {
         if (orderInfoMapper.update(null, updateWrapper) == 1) {
             log.info("Order status changed; action=payment, orderId={}, fromStatus={}, toStatus={}, result=success",
                     orderId, currentStatus, OrderConstant.SUCCESS_PAY);
+            JSONObject content = new JSONObject();
+            content.put("orderId", orderId);
+            content.put("orderStatus", OrderConstant.SUCCESS_PAY);
+            pushEvent(orderInfo.getPassengerId(), UserIdentity.PASSENGER.getIdentity(),
+                    "order.paid", content);
+            pushEvent(orderInfo.getDriverId(), UserIdentity.DRIVER.getIdentity(),
+                    "order.paid", content);
             return ResponseResult.success();
         }
 
@@ -1690,6 +1779,15 @@ public class OrderInfoService {
         if (updated == 1) {
             log.info("Order status changed; action=cancel, orderId={}, fromStatus={}, toStatus={}, actor={}, result=success",
                     orderId, orderStatus, OrderConstant.ORDER_CANCEL, identity);
+            JSONObject content = new JSONObject();
+            content.put("orderId", orderId);
+            content.put("orderStatus", OrderConstant.ORDER_CANCEL);
+            content.put("cancelTypeCode", cancelTypeCode);
+            content.put("cancelledBy", identity);
+            pushEvent(orderInfo.getPassengerId(), UserIdentity.PASSENGER.getIdentity(),
+                    "order.cancelled", content);
+            pushEvent(orderInfo.getDriverId(), UserIdentity.DRIVER.getIdentity(),
+                    "order.cancelled", content);
             return ResponseResult.success();
         }
 
@@ -1734,18 +1832,27 @@ public class OrderInfoService {
 
 
     public ResponseResult<List<OrderInfo>> driverOrders(String driverPhone) {
+        return driverOrders(driverPhone, null);
+    }
+
+    public ResponseResult<List<OrderInfo>> driverOrders(String driverPhone, Double radiusKm) {
         if (driverPhone == null || driverPhone.isBlank()) {
             return ResponseResult.fail(0, "司机账号无效");
+        }
+        if (radiusKm != null && (!Double.isFinite(radiusKm) || radiusKm < 0.1 || radiusKm > 50)) {
+            return ResponseResult.fail(0, "附近距离需在 0.1 到 50 公里之间");
         }
         LocalDateTime pendingSince = LocalDateTime.now(clock)
                 .minusMinutes(Math.max(1L, acceptTimeoutMinutes));
         String driverCityCode = null;
+        Long driverCarId = null;
         try {
             ResponseResult<DriverCarBindingRelationship> bindingResult =
                     serviceDriverUserClient.getBindingByPhone(driverPhone);
             DriverCarBindingRelationship binding = bindingResult == null ? null : bindingResult.getData();
             if (bindingResult != null && bindingResult.getCode() == CommonStatus.SUCCESS.getCode()
                     && binding != null && binding.getCarId() != null) {
+                driverCarId = binding.getCarId();
                 ResponseResult<Car> carResult = serviceDriverUserClient.getCarById(binding.getCarId());
                 Car car = carResult == null ? null : carResult.getData();
                 if (carResult != null && carResult.getCode() == CommonStatus.SUCCESS.getCode()
@@ -1772,7 +1879,71 @@ public class OrderInfoService {
                 })
                 .orderByDesc("gmt_create", "id")
                 .last("LIMIT 100");
-        return ResponseResult.success(orderInfoMapper.selectList(query));
+        List<OrderInfo> orders = orderInfoMapper.selectList(query);
+        if (radiusKm == null) {
+            return ResponseResult.success(orders);
+        }
+
+        boolean hasUnassigned = orders.stream().anyMatch(order ->
+                order.getDriverPhone() == null || order.getDriverPhone().isBlank());
+        if (!hasUnassigned) {
+            return ResponseResult.success(orders);
+        }
+        if (driverCarId == null) {
+            return ResponseResult.fail(0, "请先绑定车辆并在司机工作台上报当前位置");
+        }
+
+        ResponseResult<TerminalResponse> positionResult = serviceMapClient.localPosition(driverCarId);
+        TerminalResponse position = positionResult == null ? null : positionResult.getData();
+        if (positionResult == null || positionResult.getCode() != CommonStatus.SUCCESS.getCode()
+                || position == null) {
+            return ResponseResult.fail(1700, "请先在司机工作台上报当前位置后再筛选附近订单");
+        }
+
+        Double driverLatitude = parseCoordinate(position.getLatitude());
+        Double driverLongitude = parseCoordinate(position.getLongitude());
+        if (driverLatitude == null || driverLongitude == null) {
+            return ResponseResult.fail(1700, "司机当前位置无效，请重新上报定位");
+        }
+
+        List<OrderInfo> filtered = new ArrayList<>();
+        for (OrderInfo order : orders) {
+            if (driverPhone.equals(order.getDriverPhone())) {
+                filtered.add(order);
+                continue;
+            }
+            Double distance = straightLineDistanceKm(driverLatitude, driverLongitude,
+                    parseCoordinate(order.getDepLatitude()), parseCoordinate(order.getDepLongitude()));
+            if (distance != null && distance <= radiusKm) {
+                filtered.add(order);
+            }
+        }
+        return ResponseResult.success(filtered);
+    }
+
+    private Double parseCoordinate(String value) {
+        if (value == null || value.isBlank()) return null;
+        try {
+            double parsed = Double.parseDouble(value.trim());
+            return Double.isFinite(parsed) ? parsed : null;
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
+    private Double straightLineDistanceKm(Double fromLatitude, Double fromLongitude,
+                                           Double toLatitude, Double toLongitude) {
+        if (fromLatitude == null || fromLongitude == null || toLatitude == null || toLongitude == null) {
+            return null;
+        }
+        double latitudeDelta = Math.toRadians(toLatitude - fromLatitude);
+        double longitudeDelta = Math.toRadians(toLongitude - fromLongitude);
+        double fromLatitudeRadians = Math.toRadians(fromLatitude);
+        double toLatitudeRadians = Math.toRadians(toLatitude);
+        double haversine = Math.pow(Math.sin(latitudeDelta / 2), 2)
+                + Math.cos(fromLatitudeRadians) * Math.cos(toLatitudeRadians)
+                * Math.pow(Math.sin(longitudeDelta / 2), 2);
+        return 2 * 6371.0088 * Math.asin(Math.min(1.0, Math.sqrt(haversine)));
     }
 
     public ResponseResult acceptOrder(Long orderId, String driverPhone) {
@@ -1851,6 +2022,7 @@ public class OrderInfoService {
             if (orderInfoMapper.update(null, update) == 1) {
                 log.info("Order status changed; action=driver_accept, orderId={}, fromStatus={}, toStatus={}, result=success",
                         orderId, OrderConstant.ORDER_START, OrderConstant.DRIVER_RECEIVE_ORDER);
+                pushOrderAccepted(order, driver, car);
                 return ResponseResult.success();
             }
 

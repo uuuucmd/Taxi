@@ -28,6 +28,9 @@ public interface ServiceMapClient {
     @RequestMapping(method = RequestMethod.POST, value = "/local-locations/around")
     ResponseResult<List<TerminalResponse>> localAroundSearch(@RequestParam String center, @RequestParam Integer radius);
 
+    @RequestMapping(method = RequestMethod.GET, value = "/local-locations/position")
+    ResponseResult<TerminalResponse> localPosition(@RequestParam("carId") Long carId);
+
     @RequestMapping(method = RequestMethod.POST, value = "/local-locations/trip")
     ResponseResult<TrsearchResponse> simulatedTrip(@RequestBody PredictPriceDTO route);
 

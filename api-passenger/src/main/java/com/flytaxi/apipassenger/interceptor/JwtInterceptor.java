@@ -51,7 +51,7 @@ public class JwtInterceptor implements HandlerInterceptor {
 
             // check the token using key
             String tokenValue = redisTemplate.opsForValue().get(tokenKey);
-            if (tokenValue.trim().equals("") || tokenValue == null || !tokenValue.trim().equals(token.trim())) {
+            if (tokenValue == null || tokenValue.trim().isEmpty() || !tokenValue.trim().equals(token.trim())) {
                 resultMessage = "token invalid";
                 hasNoError = false;
             }

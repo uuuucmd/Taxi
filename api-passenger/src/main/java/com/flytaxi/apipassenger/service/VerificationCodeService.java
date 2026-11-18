@@ -84,7 +84,13 @@ public class VerificationCodeService {
         // once the verification code matches, check the existence of users using service function
         VerificationCodeDTO verificationCodeDTO = new VerificationCodeDTO();
         verificationCodeDTO.setPassengerPhone(passengerPhone);
-        userClient.loginOrRegister(verificationCodeDTO);
+        ResponseResult loginResult = userClient.loginOrRegister(verificationCodeDTO);
+        if (loginResult == null || loginResult.getCode() != CommonStatus.SUCCESS.getCode()) {
+            return loginResult == null
+                    ? ResponseResult.fail(CommonStatus.DOWNSTREAM_RESPONSE_ERROR.getCode(),
+                            CommonStatus.DOWNSTREAM_RESPONSE_ERROR.getMessage())
+                    : loginResult;
+        }
 
         // create a token for the access of users
         String accessToken = JwtUtils.generateToken(passengerPhone, UserIdentity.PASSENGER.getIdentity(),

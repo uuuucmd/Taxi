@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-import { CarFront, LockKeyhole, MapPin, Plus, RefreshCw, Send } from 'lucide-vue-next'
+import { CarFront, LockKeyhole, MapPin, Plus, RefreshCw } from 'lucide-vue-next'
 import { driverApi } from '../services/api'
 
 const props = defineProps({ authenticated: Boolean })
@@ -12,9 +12,7 @@ const saving = ref(false)
 const error = ref('')
 const form = reactive({ vehicleNo: '', brand: '', model: '', address: '', seats: 4, ownerName: '', vehicleType: '1', plateColor: '1', vehicleColor: '1' })
 const lockForm = reactive({ vehicleNo: '' })
-const point = reactive({ address: '', location: '', locatetime: '' })
 const busy = computed(() => loading.value || saving.value)
-const canUpload = computed(() => vehicle.value?.traceReady && vehicle.value?.state === 0)
 const localSimulation = computed(() => vehicle.value?.locationMode === 'local')
 const types = { '1': '快车 / 普通型', '2': '舒适型', '3': '商务型' }
 let disposed = false
@@ -93,40 +91,6 @@ async function initializeMap() {
   })
 }
 
-async function uploadPoint() {
-  await perform('上传车辆定位', async () => {
-    const current = await driverApi.vehicle()
-    if (disposed) return
-    if (!disposed) vehicle.value = current.data || null
-    if (!current.data) throw new Error('当前账号未锁定车辆，请先锁定或登记车辆')
-    if (!current.data.traceReady) throw new Error('请先初始化车辆定位')
-    if (current.data.state !== 0) throw new Error('车辆已停用，请联系管理员')
-    const location = point.location.trim()
-    if (!/^-?\d{1,3}(?:\.\d{1,6})?,-?\d{1,2}(?:\.\d{1,6})?$/.test(location)) {
-      throw new Error('车辆坐标格式应为经度,纬度，最多保留6位小数')
-    }
-    const [longitude, latitude] = location.split(',').map(Number)
-    const latitudeLimit = current.data.locationMode === 'local' ? 85.051128 : 90
-    if (Math.abs(longitude) > 180 || Math.abs(latitude) > latitudeLimit) throw new Error('车辆坐标超出有效范围')
-    const timestamp = point.locatetime ? new Date(point.locatetime).getTime() : Date.now()
-    if (!Number.isFinite(timestamp) || timestamp <= 0) throw new Error('请选择有效的定位时间')
-    return driverApi.uploadPoints({ points: [{ location, locatetime: String(timestamp) }] })
-  })
-}
-
-async function locateAddress() {
-  await perform('解析车辆位置', async () => {
-    const address = point.address.trim()
-    point.location = ''
-    if (!address) throw new Error('请填写车辆所在城市和详细地点')
-    const result = await driverApi.geocode(address)
-    const { longitude, latitude } = result.data || {}
-    if (!longitude || !latitude) throw new Error('未能确定车辆位置，请填写更详细的地点')
-    if (!disposed) point.location = `${longitude},${latitude}`
-    return result
-  })
-}
-
 onMounted(loadVehicle)
 onBeforeUnmount(() => { disposed = true })
 </script>
@@ -182,17 +146,8 @@ onBeforeUnmount(() => { disposed = true })
           <div v-if="!localSimulation"><dt>定位状态</dt><dd>{{ vehicle.traceReady ? '已初始化' : '未初始化' }}</dd></div>
         </dl>
         <button v-if="!vehicle.traceReady" class="secondary-button full-button" :disabled="busy || vehicle.state !== 0" @click="initializeMap"><MapPin :size="16" />{{ saving ? '正在处理' : '初始化车辆定位' }}</button>
+        <p class="vehicle-location-note"><MapPin :size="15" />车辆定位请到司机工作台上报，附近订单筛选使用那里最近一次上报的位置。</p>
       </div>
-      <form class="vehicle-location" @submit.prevent="uploadPoint">
-        <div class="surface-heading"><h3>{{ localSimulation ? '模拟车辆定位' : '车辆定位' }}</h3><MapPin :size="20" /></div>
-        <fieldset :disabled="busy || !canUpload" class="vehicle-fields">
-          <label class="field"><span>车辆所在地点</span><input v-model="point.address" maxlength="200" placeholder="北京市北京站" @input="point.location = ''" /></label>
-          <button class="secondary-button full-button locate-address" type="button" @click="locateAddress"><MapPin :size="16" />确定位置</button>
-          <label class="field"><span>车辆坐标</span><input v-model="point.location" required placeholder="经度,纬度" /></label>
-          <label class="field"><span>定位时间（可选）</span><input v-model="point.locatetime" type="datetime-local" step="1" /></label>
-          <button class="primary-button full-button" type="submit"><Send :size="16" />{{ saving ? '正在处理' : localSimulation ? '保存模拟定位' : '上传定位点' }}</button>
-        </fieldset>
-      </form>
     </div>
   </section>
 </template>
@@ -225,8 +180,8 @@ onBeforeUnmount(() => { disposed = true })
 .secondary-button:hover:not(:disabled) { background: #eeeae1; }
 .full-button { width: 100%; }
 .empty-state { min-height: 220px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; color: var(--muted); background: #fffdf8; border: 1px dashed #d8d3c8; border-radius: 7px; font-size: 13px; }
-.vehicle-bound-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; }
-.vehicle-details, .vehicle-location { min-width: 0; }
+.vehicle-bound-layout { max-width: 760px; }
+.vehicle-details { min-width: 0; }
 .surface-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 .surface-heading h3 { margin: 0; font-size: 18px; letter-spacing: 0; overflow-wrap: anywhere; }
 .surface-heading svg { color: #c57a16; }
@@ -234,10 +189,9 @@ onBeforeUnmount(() => { disposed = true })
 .vehicle-summary > div { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
 .vehicle-summary dt { color: var(--muted); flex-shrink: 0; }
 .vehicle-summary dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
-.vehicle-location .field { margin-bottom: 20px; }
-.locate-address { margin-bottom: 20px; }
+.vehicle-location-note { display: flex; align-items: flex-start; gap: 8px; margin: 18px 0 0; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.vehicle-location-note svg { flex: none; margin-top: 1px; color: #c57a16; }
 @media (max-width: 980px) { .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 820px) { .vehicle-bound-layout { grid-template-columns: 1fr; gap: 32px; } }
 @media (max-width: 680px) {
   .field-grid { grid-template-columns: 1fr; }
   .vehicle-toolbar { align-items: flex-start; }

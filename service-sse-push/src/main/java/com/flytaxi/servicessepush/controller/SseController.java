@@ -1,83 +1,101 @@
 package com.flytaxi.servicessepush.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.flytaxi.internalCommon.constant.UserIdentity;
 import com.flytaxi.internalCommon.request.PushRequest;
 import com.flytaxi.internalCommon.util.SsePrefixUtils;
+import com.flytaxi.servicessepush.service.SseAuthService;
+import com.flytaxi.servicessepush.service.SseConnectionRegistry;
+import com.flytaxi.servicessepush.service.SseRedisSubscriber;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.io.IOException;
-import java.util.HashMap;
+import javax.servlet.http.HttpServletResponse;
 import java.util.Map;
 
 /**
- * @Date: 2024-11-21-23:26
- * @Description: This class is used to coordinate all the business on the front end as well as the back end
+ * SSE endpoint used by browsers to keep a push connection open.
+ *
+ * Connections are local to this JVM; push requests are published on Redis so every instance can
+ * deliver to the connections it owns. That is what makes multiple instances work.
  */
-@RestController
 @Slf4j
+@RestController
+@RequiredArgsConstructor
 public class SseController {
-    // the map to store sseEmitter specific to each user
-    public static Map<String, SseEmitter> sseEmitterMap = new HashMap<>();
+
+    private final SseAuthService sseAuthService;
+    private final SseConnectionRegistry sseConnectionRegistry;
+    private final SseRedisSubscriber sseRedisSubscriber;
+    private final StringRedisTemplate stringRedisTemplate;
+    private final ObjectMapper objectMapper;
+
+    @Value("${sse.channel:sse:push}")
+    private String channel;
 
     /**
-     * This method is used to establish a connection between the front end and the server
-     * @param userId
-     * @param identity
-     * @return
+     * EventSource cannot send an Authorization header, so the token is passed as a query parameter
+     * and validated by the server. The user id is resolved from the token, never trusted from the
+     * client.
      */
     @GetMapping("/connect")
-    public SseEmitter connect(@RequestParam Long userId, @RequestParam String identity){
-        SseEmitter sseEmitter = new SseEmitter(0l);
+    public SseEmitter connect(@RequestParam(value = "token", required = false) String token,
+                              HttpServletResponse response) {
+        SseAuthService.AuthenticatedUser user = sseAuthService.authenticate(token);
+        response.setHeader("Cache-Control", "no-cache");
+        response.setHeader("X-Accel-Buffering", "no");
 
-        String sseMapKey = SsePrefixUtils.generatorSseKey(userId,identity);
-
-        sseEmitterMap.put(sseMapKey, sseEmitter);
-        log.info("built connection");
-
-        return sseEmitter;
+        String key = SsePrefixUtils.generatorSseKey(user.userId(), user.identity());
+        return sseConnectionRegistry.register(key, user.userId(), user.identity());
     }
 
     /**
-     * This function is used to send messages to the front-end server
-     * @param pushRequest
-     * @return
+     * Internal push endpoint. A null userId means broadcast to every online user with the given
+     * identity, which is how a new order reaches all online drivers.
      */
     @PostMapping("/push")
     public String push(@RequestBody PushRequest pushRequest) {
-
-        Long userId = pushRequest.getUserId();
-        String identity = pushRequest.getIdentity();
-        String content = pushRequest.getContent();
-        String sseMapKey = SsePrefixUtils.generatorSseKey(userId,identity);
-        try {
-            if (sseEmitterMap.containsKey(sseMapKey)){
-                sseEmitterMap.get(sseMapKey).send(content);
-            }else {
-                return "Push unsuccessfully";
-            }
-
-        } catch (IOException e) {
-            log.warn("Failed to send SSE message for key {}", sseMapKey, e);
+        if (pushRequest == null || pushRequest.getIdentity() == null) {
+            return "invalid push request";
         }
-
-        return "To the user: " + sseMapKey + ", sent a message: " + content;
+        if (!isKnownIdentity(pushRequest.getIdentity())) {
+            return "invalid identity";
+        }
+        try {
+            String payload = objectMapper.writeValueAsString(pushRequest);
+            stringRedisTemplate.convertAndSend(channel, payload);
+            return "published";
+        } catch (Exception exception) {
+            log.warn("SSE Redis publish failed; delivering locally, error={}", exception.getMessage());
+            sseRedisSubscriber.deliver(pushRequest);
+            return "delivered-locally";
+        }
     }
 
-    /**
-     * This method is used to close the connection
-     * @param userId
-     * @param identity
-     * @return
-     */
     @GetMapping("/close")
-    public String close(@RequestParam Long userId, @RequestParam String identity){
-        String sseMapKey = SsePrefixUtils.generatorSseKey(userId,identity);
-        log.info("Closed SSE connection for key {}", sseMapKey);
-        if (sseEmitterMap.containsKey(sseMapKey)){
-            sseEmitterMap.remove(sseMapKey);
-        }
+    public String close(@RequestParam(value = "token", required = false) String token) {
+        SseAuthService.AuthenticatedUser user = sseAuthService.authenticate(token);
+        String key = SsePrefixUtils.generatorSseKey(user.userId(), user.identity());
+        sseConnectionRegistry.remove(key);
         return "close successfully!";
+    }
 
+    @GetMapping("/stats")
+    public Map<String, Object> stats() {
+        return Map.of("connections", sseConnectionRegistry.size());
+    }
+
+    private boolean isKnownIdentity(String identity) {
+        return UserIdentity.PASSENGER.getIdentity().equals(identity)
+                || UserIdentity.DRIVER.getIdentity().equals(identity)
+                || UserIdentity.ADMIN.getIdentity().equals(identity);
     }
 }

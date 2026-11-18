@@ -26,7 +26,14 @@ const loading = ref(false)
 const submitting = ref(false)
 const drivers = ref([])
 const driverTotal = ref(0)
+const passengers = ref([])
+const passengerTotal = ref(0)
+const passengerPage = ref(1)
+const passengerPageSize = 20
 const search = ref('')
+const passengerSearch = ref('')
+const passengerLoading = ref(false)
+const passengerUpdatingPhone = ref('')
 const notice = ref('')
 const noticeType = ref('success')
 
@@ -53,6 +60,7 @@ const vehicleForm = reactive({
 
 const navItems = [
   { id: 'overview', label: '运营概览', icon: Gauge },
+  { id: 'passengers', label: '乘客管理', icon: UserRound },
   { id: 'drivers', label: '司机管理', icon: Users },
   { id: 'vehicles', label: '车辆管理', icon: CarFront },
   { id: 'operations', label: '平台配置', icon: Settings2 },
@@ -69,6 +77,7 @@ const filteredDrivers = computed(() => {
 
 const activeDrivers = computed(() => drivers.value.filter((driver) => Number(driver.state ?? 1) === 1).length)
 const inactiveDrivers = computed(() => Math.max(drivers.value.length - activeDrivers.value, 0))
+const passengerPages = computed(() => Math.max(1, Math.ceil(passengerTotal.value / passengerPageSize)))
 
 function responseData(result) {
   return result?.data ?? result
@@ -89,7 +98,7 @@ function handleError(error, fallback) {
   notify(error.message || fallback, 'error')
 }
 
-function extractDrivers(data) {
+function extractRecords(data) {
   if (Array.isArray(data)) return data
   if (Array.isArray(data?.records)) return data.records
   if (Array.isArray(data?.list)) return data.list
@@ -97,17 +106,66 @@ function extractDrivers(data) {
   return []
 }
 
+function formatRegisteredAt(value) {
+  if (!value) return '未记录'
+  return String(value).replace('T', ' ').slice(0, 16)
+}
+
 async function loadDrivers() {
   loading.value = true
   try {
     const data = responseData(await bossApi.drivers({ page: 1, pageSize: 100 }))
-    drivers.value = extractDrivers(data)
+    drivers.value = extractRecords(data)
     driverTotal.value = Number(data?.total ?? data?.totalCount ?? drivers.value.length)
   } catch (error) {
     handleError(error, '司机数据读取失败')
   } finally {
     loading.value = false
   }
+}
+
+async function loadPassengers(page = passengerPage.value) {
+  passengerLoading.value = true
+  try {
+    const data = responseData(await bossApi.passengers({
+      page,
+      pageSize: passengerPageSize,
+      keyword: passengerSearch.value,
+    }))
+    passengers.value = extractRecords(data)
+    passengerTotal.value = Number(data?.total ?? data?.totalCount ?? passengers.value.length)
+    passengerPage.value = Number(data?.page ?? page)
+  } catch (error) {
+    handleError(error, '乘客数据读取失败')
+  } finally {
+    passengerLoading.value = false
+  }
+}
+
+async function togglePassenger(passenger) {
+  const passengerPhone = passenger.passengerPhone || passenger.phone
+  if (!passengerPhone) {
+    notify('乘客手机号缺失，无法更新状态', 'error')
+    return
+  }
+  const currentState = Number(passenger.state ?? 0)
+  const state = currentState === 0 ? 1 : 0
+  passengerUpdatingPhone.value = passengerPhone
+  try {
+    await bossApi.updatePassengerState(passengerPhone, state)
+    notify(state === 0 ? '乘客账号已启用' : '乘客账号已停用')
+    await loadPassengers()
+  } catch (error) {
+    handleError(error, '乘客状态更新失败')
+  } finally {
+    passengerUpdatingPhone.value = ''
+  }
+}
+
+let passengerSearchTimer
+function schedulePassengerSearch() {
+  window.clearTimeout(passengerSearchTimer)
+  passengerSearchTimer = window.setTimeout(() => loadPassengers(1), 300)
 }
 
 async function addDriver() {
@@ -158,7 +216,10 @@ async function addVehicle() {
   }
 }
 
-onMounted(loadDrivers)
+onMounted(() => {
+  loadDrivers()
+  loadPassengers()
+})
 </script>
 
 <template>
@@ -176,7 +237,7 @@ onMounted(loadDrivers)
       <div>
         <p class="admin-kicker"><ShieldCheck :size="14" /> OPERATIONS CONTROL</p>
         <h1>运营全局，一目了然。</h1>
-        <p>管理司机档案、车辆资料与平台基础配置。</p>
+        <p>管理司机档案、乘客账户、车辆资料与平台基础配置。</p>
       </div>
       <div class="admin-session"><span></span>{{ identity }} · 管理员权限</div>
     </section>
@@ -194,6 +255,10 @@ onMounted(loadDrivers)
         <article>
           <span class="stat-icon red"><UserRound :size="19" /></span>
           <div><span>停用司机</span><strong>{{ inactiveDrivers }}</strong><p>当前暂停登录或接单</p></div>
+        </article>
+        <article>
+          <span class="stat-icon slate"><UserRound :size="19" /></span>
+          <div><span>乘客总数</span><strong>{{ passengerTotal }}</strong><p>已注册的乘客账户</p></div>
         </article>
       </section>
 
@@ -218,11 +283,38 @@ onMounted(loadDrivers)
         <section class="quick-actions-panel">
           <span class="admin-section-kicker">QUICK ACTIONS</span>
           <h2>运营快捷入口</h2>
+          <button type="button" @click="active = 'passengers'"><span><UserRound :size="18" /><strong>查看乘客</strong><small>浏览注册乘客账户</small></span><Search :size="16" /></button>
           <button type="button" @click="active = 'drivers'"><span><Users :size="18" /><strong>新增司机</strong><small>建立司机基础档案</small></span><Plus :size="16" /></button>
           <button type="button" @click="active = 'vehicles'"><span><CarFront :size="18" /><strong>录入车辆</strong><small>维护车辆与归属信息</small></span><Plus :size="16" /></button>
           <button type="button" @click="active = 'operations'"><span><Settings2 :size="18" /><strong>平台配置</strong><small>查看服务与角色配置</small></span><Plus :size="16" /></button>
         </section>
       </div>
+    </template>
+
+    <template v-else-if="active === 'passengers'">
+      <section class="admin-directory full-directory passenger-directory">
+        <header class="admin-panel-heading">
+          <div><span class="admin-section-kicker">PASSENGER DIRECTORY</span><h2>乘客管理</h2></div>
+          <label class="table-search"><Search :size="15" /><input v-model="passengerSearch" placeholder="搜索姓名或手机号" @input="schedulePassengerSearch" /></label>
+        </header>
+        <div v-if="passengerLoading" class="admin-loading"><LoaderCircle class="spin" :size="20" />正在读取乘客数据</div>
+        <div v-else-if="passengers.length" class="driver-table passenger-table">
+          <div class="driver-table-head"><span>乘客</span><span>状态</span><span>注册时间</span><span>操作</span></div>
+          <div v-for="passenger in passengers" :key="passenger.id || passenger.passengerPhone" class="driver-table-row">
+            <span class="driver-cell"><i>{{ String(passenger.passengerName || passenger.name || '乘').slice(0, 1) }}</i><span><strong>{{ passenger.passengerName || passenger.name || '未命名乘客' }}</strong><small>{{ passenger.passengerPhone || passenger.phone || '未填写手机号' }}</small></span></span>
+            <span><b :class="Number(passenger.state ?? 0) === 0 ? 'active-tag' : 'inactive-tag'">{{ Number(passenger.state ?? 0) === 0 ? '正常' : '停用' }}</b></span>
+            <span>{{ formatRegisteredAt(passenger.gmtCreate) }}</span>
+            <span><button class="table-action" type="button" :disabled="passengerUpdatingPhone === passenger.passengerPhone" @click="togglePassenger(passenger)">{{ passengerUpdatingPhone === passenger.passengerPhone ? '处理中' : (Number(passenger.state ?? 0) === 0 ? '停用' : '启用') }}</button></span>
+          </div>
+        </div>
+        <div v-else class="admin-empty"><ClipboardList :size="30" /><strong>没有匹配的乘客</strong><p>调整搜索条件，或等待乘客完成首次登录。</p></div>
+        <p v-if="!passengerLoading && passengerTotal" class="directory-summary">共 {{ passengerTotal.toLocaleString() }} 位乘客，本页显示 {{ passengers.length }} 位</p>
+        <div v-if="!passengerLoading && passengerPages > 1" class="passenger-pagination">
+          <button type="button" :disabled="passengerPage <= 1" @click="loadPassengers(passengerPage - 1)">上一页</button>
+          <span>第 {{ passengerPage }} / {{ passengerPages }} 页</span>
+          <button type="button" :disabled="passengerPage >= passengerPages" @click="loadPassengers(passengerPage + 1)">下一页</button>
+        </div>
+      </section>
     </template>
 
     <template v-else-if="active === 'drivers'">
@@ -293,7 +385,7 @@ onMounted(loadDrivers)
           <div class="permission-head"><span>工作台</span><span>核心功能</span><span>登录方式</span><span>状态</span></div>
           <div><span><UserRound :size="16" />客户端</span><span>叫车、估价、行程与支付</span><span>手机验证码</span><b class="permission-on"><CheckCircle2 :size="13" />已启用</b></div>
           <div><span><CarFront :size="16" />司机端</span><span>接单、车辆状态与营运管理</span><span>手机验证码</span><b class="permission-on"><CheckCircle2 :size="13" />已启用</b></div>
-          <div><span><ShieldCheck :size="16" />管理员</span><span>司机、车辆与平台配置</span><span>账号密码</span><b class="permission-on"><CheckCircle2 :size="13" />已启用</b></div>
+          <div><span><ShieldCheck :size="16" />管理员</span><span>司机、乘客、车辆与平台配置</span><span>账号密码</span><b class="permission-on"><CheckCircle2 :size="13" />已启用</b></div>
         </div>
         <div class="platform-cards">
           <div><span>API 接入服务</span><strong>客户端 / 司机端 / 管理端</strong></div>
@@ -315,12 +407,13 @@ onMounted(loadDrivers)
 .admin-intro p { margin: 11px 0 0; color: #7e8781; font-size: 12px; }
 .admin-session { gap: 8px; flex: none; padding: 9px 12px; color: #77443c; background: #f5e8e4; border: 1px solid #e5cec7; border-radius: 4px; font-size: 9px; }
 .admin-session span { width: 7px; height: 7px; background: #c8463a; border-radius: 50%; }
-.admin-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+.admin-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 15px; }
 .admin-stats article { display: flex; gap: 13px; padding: 20px; background: #fffdf8; border: 1px solid #ddd8cc; border-radius: 6px; }
 .stat-icon { width: 39px; height: 39px; display: grid; place-items: center; flex: none; border-radius: 5px; }
 .stat-icon.green { color: #287156; background: #e6f0ea; }
 .stat-icon.amber { color: #a66a17; background: #f5e9d5; }
 .stat-icon.red { color: #a64b40; background: #f5e7e4; }
+.stat-icon.slate { color: #355f77; background: #e6eef2; }
 .admin-stats article div { min-width: 0; }
 .admin-stats span, .admin-stats strong, .admin-stats p { display: block; }
 .admin-stats div > span { color: #8a918c; font-size: 9px; }
@@ -363,7 +456,13 @@ onMounted(loadDrivers)
 .table-search { min-height: 35px; gap: 7px; padding: 0 10px; border: 1px solid #d8d3c8; border-radius: 4px; color: #89908b; background: #f7f4ed; }
 .table-search input { width: 170px; border: 0; outline: 0; color: #35403a; background: transparent; font-size: 9px; }
 .driver-table.managed .driver-table-head, .driver-table.managed .driver-table-row { grid-template-columns: minmax(150px, 1.4fr) minmax(70px, .6fr) 60px 55px; }
+.passenger-table .driver-table-head, .passenger-table .driver-table-row { grid-template-columns: minmax(180px, 1.4fr) 80px minmax(110px, .7fr) 55px; }
+.directory-summary { margin: 14px 0 0; color: #979d99; font-size: 8px; }
+.passenger-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 14px; color: #858d88; font-size: 9px; }
+.passenger-pagination button { min-height: 30px; padding: 0 10px; border: 1px solid #d4cfc3; border-radius: 4px; color: #5e6762; background: #f6f3ec; font-size: 8px; }
+.passenger-pagination button:disabled { cursor: not-allowed; opacity: .45; }
 .table-action { min-height: 28px; padding: 0 9px; border: 1px solid #d4cfc3; border-radius: 4px; color: #5e6762; background: #f6f3ec; font-size: 8px; }
+.table-action:disabled { cursor: wait; opacity: .55; }
 .editor-panel { position: sticky; top: 90px; }
 .editor-panel header { justify-content: space-between; gap: 14px; margin-bottom: 19px; }
 .editor-panel header svg { color: #c8463a; }
@@ -401,6 +500,7 @@ onMounted(loadDrivers)
 @media (max-width: 1080px) {
   .admin-dashboard, .management-layout, .vehicle-management { grid-template-columns: 1fr; }
   .editor-panel { position: static; }
+  .admin-stats { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 720px) {
@@ -410,6 +510,9 @@ onMounted(loadDrivers)
   .driver-table-head { display: none; }
   .driver-table-row, .driver-table.managed .driver-table-row { grid-template-columns: 1fr auto; padding: 11px 0; gap: 8px; }
   .driver-table-row > span:nth-child(2) { display: none; }
+  .passenger-table .driver-table-row > span:nth-child(2) { display: inline-block; }
+  .passenger-table .driver-table-row > span:nth-child(3) { grid-column: 1; grid-row: 2; }
+  .passenger-table .driver-table-row > span:nth-child(4) { grid-column: 2; grid-row: 2; justify-self: end; }
   .driver-table.managed .driver-table-row > span:nth-child(4) { grid-column: 2; grid-row: 2; justify-self: end; }
   .permission-matrix { overflow-x: auto; }
   .permission-matrix > div { min-width: 650px; }

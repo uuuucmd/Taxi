@@ -23,7 +23,11 @@ public class ApiDriverOrderInfoService {
     ServiceOrderClient serviceOrderClient;
 
     public ResponseResult<List<OrderInfo>> driverOrders(String driverPhone) {
-        return serviceOrderClient.driverOrders(driverPhone);
+        return driverOrders(driverPhone, null);
+    }
+
+    public ResponseResult<List<OrderInfo>> driverOrders(String driverPhone, Double radiusKm) {
+        return serviceOrderClient.driverOrders(driverPhone, radiusKm);
     }
 
     public ResponseResult<OrderInfo> orderDetail(Long orderId, String driverPhone) {

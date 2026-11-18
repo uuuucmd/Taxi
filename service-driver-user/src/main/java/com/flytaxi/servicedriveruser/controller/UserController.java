@@ -76,6 +76,7 @@ public class UserController {
             response.setDriverPhone(driverPhone);
         }else {
             response.setDriverPhone(driverUserDb.getDriverPhone());
+            response.setDriverId(driverUserDb.getId());
         }
         response.setIfExists(ifExists);
 

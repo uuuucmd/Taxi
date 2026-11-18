@@ -36,3 +36,9 @@ spring:
             - Path=/driver/**
           filters:
             - StripPrefix=1
+        - id: sse-api
+          uri: lb://service-sse-push
+          predicates:
+            - Path=/api/sse/**
+          filters:
+            - StripPrefix=2

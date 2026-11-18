@@ -13,7 +13,8 @@ import java.util.List;
 public interface ServiceOrderClient {
 
     @GetMapping("/order/driver-orders")
-    ResponseResult<List<OrderInfo>> driverOrders(@RequestParam("driverPhone") String driverPhone);
+    ResponseResult<List<OrderInfo>> driverOrders(@RequestParam("driverPhone") String driverPhone,
+                                                 @RequestParam(value = "radiusKm", required = false) Double radiusKm);
 
     @PostMapping("/order/accept")
     ResponseResult acceptOrder(@RequestParam("orderId") Long orderId,

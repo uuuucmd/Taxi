@@ -25,6 +25,7 @@ public enum CommonStatus {
 
     // User Error, from 1200-1299
     USER_NOT_EXISTS(1200, "User is not existed"),
+    USER_DISABLED(1201, "User account is disabled"),
 
     // price rule not exists, from 1300-1399
     PRICE_RULE_NOT_EXISTS(1300, "Price rules do not exist"),

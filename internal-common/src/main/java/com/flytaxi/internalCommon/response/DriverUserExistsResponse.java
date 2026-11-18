@@ -12,6 +12,9 @@ public class DriverUserExistsResponse {
     // the phone number of the driver
     private String driverPhone;
 
+    // the id of the driver
+    private Long driverId;
+
     // whether the driver exists in the database
     private int ifExists;
 }

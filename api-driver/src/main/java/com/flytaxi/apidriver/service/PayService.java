@@ -45,6 +45,7 @@ public class PayService {
         pushRequest.setContent(message.toString());
         pushRequest.setUserId(passengerId);
         pushRequest.setIdentity(UserIdentity.PASSENGER.getIdentity());
+        pushRequest.setEvent("pay.info");
 
         // push order information
         serviceSsePushClient.push(pushRequest);

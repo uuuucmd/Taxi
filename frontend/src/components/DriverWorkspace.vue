@@ -10,6 +10,7 @@ import {
   Flag,
   Gauge,
   LoaderCircle,
+  LocateFixed,
   MapPin,
   Navigation,
   Phone,
@@ -22,7 +23,9 @@ import {
 } from 'lucide-vue-next'
 import WorkspaceShell from './WorkspaceShell.vue'
 import DriverVehicle from './DriverVehicle.vue'
+import AmapLocationPicker from './AmapLocationPicker.vue'
 import { driverApi } from '../services/api'
+import { subscribeSse } from '../services/sse'
 
 const props = defineProps({ identity: { type: String, required: true } })
 const emit = defineEmits(['logout'])
@@ -41,7 +44,17 @@ const orders = ref([])
 const currentOrder = ref(null)
 const notice = ref('')
 const noticeType = ref('success')
+const simPreset = ref('')
+const simLongitude = ref('')
+const simLatitude = ref('')
+const simReporting = ref(false)
+const simMessage = ref('')
+const simMessageType = ref('success')
+const simUpdatedAt = ref('')
+const orderRadiusKm = ref('')
+const showMapPicker = ref(false)
 let detailTimer
+let unsubscribeSse
 
 const orderStatuses = {
   0: '已失效', 1: '待接单', 2: '已接单', 3: '前往接驾', 4: '到达上车点',
@@ -65,6 +78,19 @@ const orderActions = [
 const ongoingStatuses = [2, 3, 4, 5, 6, 7, 10, 11]
 const cancellableStatuses = [2, 3, 4]
 const vehicleTypes = { '1': '经济型', '2': '舒适型', '3': '商务型' }
+const showLocationSimulator = import.meta.env.DEV || import.meta.env.VITE_ENABLE_LOCATION_SIMULATOR === 'true'
+const locationPresets = [
+  { id: 'city-center', label: '市中心（天安门）', longitude: 116.397428, latitude: 39.90923 },
+  { id: 'capital-airport', label: '首都机场 T3', longitude: 116.609564, latitude: 40.080111 },
+  { id: 'beijing-south', label: '北京南站', longitude: 116.378888, latitude: 39.865 },
+]
+const orderRadiusOptions = [
+  { value: '', label: '全部距离' },
+  { value: '1', label: '1 公里内' },
+  { value: '3', label: '3 公里内' },
+  { value: '5', label: '5 公里内' },
+  { value: '10', label: '10 公里内' },
+]
 
 const navItems = [
   { id: 'workbench', label: '司机工作台', icon: Gauge },
@@ -95,6 +121,34 @@ const currentStepIndex = computed(() => {
 const currentAction = computed(() => orderActions.find((action) => action.status === normalizedStatus(currentOrder.value)) || null)
 const currentStatusLabel = computed(() => statusLabel(currentOrder.value))
 const canCancelOrder = computed(() => cancellableStatuses.includes(normalizedStatus(currentOrder.value)))
+const locationOrigin = computed(() => {
+  const candidates = [currentOrder.value, activeOrder.value, ...orders.value]
+  return candidates.find((order) => order
+    && toCoordinate(order.depLongitude) !== null
+    && toCoordinate(order.depLatitude) !== null) || null
+})
+const simPresets = computed(() => {
+  const presets = [...locationPresets]
+  const origin = locationOrigin.value
+  if (!origin) return presets
+
+  presets.push({
+    id: 'order-origin',
+    label: `当前订单起点（${origin.departure || '上车点'}）`,
+    longitude: toCoordinate(origin.depLongitude),
+    latitude: toCoordinate(origin.depLatitude),
+  })
+  const offsets = [
+    [0.5, '订单起点 500 米内'],
+    [3.2, '订单起点 3 公里外'],
+    [5.2, '订单起点 5 公里外'],
+  ]
+  offsets.forEach(([kilometers, label]) => {
+    const point = offsetPoint(toCoordinate(origin.depLongitude), toCoordinate(origin.depLatitude), kilometers)
+    if (point) presets.push({ id: `order-origin-${kilometers}`, label, ...point })
+  })
+  return presets
+})
 
 function responseData(result) {
   return result?.data ?? result
@@ -197,6 +251,102 @@ function handleVehicleActivity(activity) {
   notify(failed ? `${activity.label}：${activity.detail || '请稍后重试'}` : `${activity.label}成功`, failed ? 'error' : 'success')
 }
 
+function toCoordinate(value) {
+  if (value === null || value === undefined || String(value).trim() === '') return null
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
+function offsetPoint(longitude, latitude, kilometers) {
+  if (longitude === null || latitude === null) return null
+  const deltaLatitude = (kilometers / 111.32) * 0.72
+  const deltaLongitude = (kilometers / (111.32 * Math.max(Math.cos(latitude * Math.PI / 180), 0.2))) * 0.72
+  return {
+    longitude: Number((longitude + deltaLongitude).toFixed(6)),
+    latitude: Number((latitude + deltaLatitude).toFixed(6)),
+  }
+}
+
+function formattedCoordinate(value) {
+  const number = toCoordinate(value)
+  return number === null ? '' : number.toFixed(6)
+}
+
+function applySimPreset() {
+  const preset = simPresets.value.find((item) => item.id === simPreset.value)
+  if (!preset) return
+  simLongitude.value = formattedCoordinate(preset.longitude)
+  simLatitude.value = formattedCoordinate(preset.latitude)
+  simMessage.value = ''
+}
+
+function toggleMapPicker() {
+  showMapPicker.value = !showMapPicker.value
+  simMessage.value = ''
+}
+
+function applyMapPick(point) {
+  simPreset.value = ''
+  simLongitude.value = formattedCoordinate(point.longitude)
+  simLatitude.value = formattedCoordinate(point.latitude)
+  simMessageType.value = 'success'
+  simMessage.value = '已从地图选点，确认后点击上报位置'
+}
+
+function handleMapError(message) {
+  simMessageType.value = 'error'
+  simMessage.value = message
+}
+
+function useOrderOrigin() {
+  const origin = locationOrigin.value
+  if (!origin) {
+    simMessageType.value = 'error'
+    simMessage.value = '当前没有带坐标的订单，无法跟随起点'
+    return
+  }
+  simPreset.value = 'order-origin'
+  simLongitude.value = formattedCoordinate(origin.depLongitude)
+  simLatitude.value = formattedCoordinate(origin.depLatitude)
+  simMessage.value = ''
+}
+
+async function reportSimulatedLocation() {
+  if (simReporting.value) return
+  if (!binding.value?.carId) {
+    simMessageType.value = 'error'
+    simMessage.value = '当前账号未绑定车辆，请先在“车辆与资质”完成绑定'
+    return
+  }
+  const longitude = toCoordinate(simLongitude.value)
+  const latitude = toCoordinate(simLatitude.value)
+  if (longitude === null || latitude === null
+      || Math.abs(longitude) > 180 || Math.abs(latitude) > 85.051128) {
+    simMessageType.value = 'error'
+    simMessage.value = '经纬度无效：经度 -180~180，纬度 -85.051128~85.051128'
+    return
+  }
+
+  simReporting.value = true
+  simMessage.value = ''
+  try {
+    await driverApi.uploadPoints({
+      carId: binding.value.carId,
+      points: [{ location: `${longitude},${latitude}`, locatetime: String(Date.now()) }],
+    })
+    simMessageType.value = 'success'
+    simUpdatedAt.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+    simMessage.value = `位置已上报：${longitude}, ${latitude}`
+    notify('模拟定位上报成功')
+  } catch (error) {
+    simMessageType.value = 'error'
+    simMessage.value = error.message || '模拟定位上报失败'
+    if (error.status === 401) emit('logout')
+  } finally {
+    simReporting.value = false
+  }
+}
+
 async function loadBinding() {
   try {
     const data = responseData(await driverApi.binding())
@@ -227,13 +377,14 @@ async function loadStatus() {
 async function loadOrders() {
   orderLoading.value = true
   try {
-    const list = extractOrders(responseData(await driverApi.orders()))
+    const list = extractOrders(responseData(await driverApi.orders(orderRadiusKm.value)))
     orders.value = list
     if (currentOrder.value) {
       const fresh = list.find((order) => String(orderId(order)) === String(orderId(currentOrder.value)))
       if (fresh) currentOrder.value = fresh
     }
   } catch (error) {
+    if (orderRadiusKm.value) orders.value = []
     handleRequestError(error, '订单列表读取失败')
   } finally {
     orderLoading.value = false
@@ -354,10 +505,25 @@ onMounted(async () => {
     if (active.value === 'current' && currentOrder.value) {
       loadOrderDetail(orderId(currentOrder.value), { silent: true })
     }
-  }, 8000)
+  }, 30000)
+  unsubscribeSse = subscribeSse('driver', event => {
+    if (event.type === 'order.created') {
+      loadOrders()
+      return
+    }
+    if (['order.status', 'order.cancelled', 'order.paid'].includes(event.type)) {
+      loadOrders()
+      if (currentOrder.value) {
+        loadOrderDetail(orderId(currentOrder.value), { silent: true })
+      }
+    }
+  })
 })
 
-onBeforeUnmount(() => window.clearInterval(detailTimer))
+onBeforeUnmount(() => {
+  window.clearInterval(detailTimer)
+  if (unsubscribeSse) unsubscribeSse()
+})
 </script>
 
 <template>
@@ -428,10 +594,62 @@ onBeforeUnmount(() => window.clearInterval(detailTimer))
         </section>
       </div>
 
+      <section v-if="showLocationSimulator" class="sim-location-panel">
+        <header class="sim-location-heading">
+          <div><span class="section-kicker">TEST TOOL</span><h2>模拟定位（测试）</h2></div>
+          <span class="sim-location-badge">仅测试环境</span>
+        </header>
+        <p class="sim-location-hint">车辆定位统一在这里上报；附近订单筛选使用最近一次上报的位置。请选择预设点或在地图上选点，经纬度只做回显。</p>
+        <div class="sim-location-form">
+          <label class="sim-location-field">
+            <span>预设点</span>
+            <select v-model="simPreset" @change="applySimPreset">
+              <option value="">请选择预设点</option>
+              <option v-for="preset in simPresets" :key="preset.id" :value="preset.id">{{ preset.label }}</option>
+            </select>
+          </label>
+          <label class="sim-location-field">
+            <span>经度</span>
+            <input v-model="simLongitude" readonly aria-readonly="true" placeholder="选点后自动填入" />
+          </label>
+          <label class="sim-location-field">
+            <span>纬度</span>
+            <input v-model="simLatitude" readonly aria-readonly="true" placeholder="选点后自动填入" />
+          </label>
+          <button class="sim-location-submit" type="button" :disabled="simReporting || !binding || !simLongitude || !simLatitude" @click="reportSimulatedLocation">
+            <LoaderCircle v-if="simReporting" class="spin" :size="16" />
+            <LocateFixed v-else :size="16" />
+            {{ simReporting ? '上报中' : '上报模拟位置' }}
+          </button>
+        </div>
+        <AmapLocationPicker
+          v-if="showMapPicker"
+          :longitude="simLongitude"
+          :latitude="simLatitude"
+          @pick="applyMapPick"
+          @error="handleMapError"
+        />
+        <div class="sim-location-footer">
+          <button class="quiet-action sim-location-follow" type="button" :disabled="!locationOrigin" @click="useOrderOrigin">跟随当前订单起点</button>
+          <button class="quiet-action sim-location-follow" type="button" @click="toggleMapPicker"><MapPin :size="14" />{{ showMapPicker ? '收起地图' : '地图点选' }}</button>
+          <span v-if="simMessage" class="sim-location-message" :class="simMessageType">{{ simMessage }}</span>
+          <span v-else-if="simUpdatedAt" class="sim-location-message success">最近上报 {{ simUpdatedAt }}</span>
+          <span v-else class="sim-location-tip">{{ binding ? '未上报时不会出现在派单候选里' : '请先绑定车辆' }}</span>
+        </div>
+      </section>
+
       <section class="orders-panel">
         <header class="orders-heading">
           <div><span class="section-kicker">DISPATCH QUEUE</span><h2>附近订单</h2></div>
-          <button class="icon-action" type="button" title="刷新订单" :disabled="orderLoading" @click="loadOrders"><LoaderCircle v-if="orderLoading" class="spin" :size="16" /><RefreshCw v-else :size="16" /></button>
+          <div class="orders-heading-actions">
+            <label class="distance-filter">
+              <span>距离</span>
+              <select v-model="orderRadiusKm" @change="loadOrders" :disabled="orderLoading">
+                <option v-for="option in orderRadiusOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+            </label>
+            <button class="icon-action" type="button" title="刷新订单" :disabled="orderLoading" @click="loadOrders"><LoaderCircle v-if="orderLoading" class="spin" :size="16" /><RefreshCw v-else :size="16" /></button>
+          </div>
         </header>
         <div v-if="orderLoading" class="orders-loading"><LoaderCircle class="spin" :size="20" />正在刷新订单</div>
         <div v-else-if="availableOrders.length" class="order-list">
@@ -525,7 +743,15 @@ onBeforeUnmount(() => window.clearInterval(detailTimer))
       <section class="orders-panel full-panel">
         <header class="orders-heading">
           <div><span class="section-kicker">ORDER HALL</span><h2>订单大厅</h2><p>可接订单会实时同步到这里。</p></div>
-          <button class="refresh-action" type="button" :disabled="orderLoading" @click="loadOrders"><LoaderCircle v-if="orderLoading" class="spin" :size="16" /><RefreshCw v-else :size="16" />刷新订单</button>
+          <div class="orders-heading-actions">
+            <label class="distance-filter">
+              <span>距离</span>
+              <select v-model="orderRadiusKm" @change="loadOrders" :disabled="orderLoading">
+                <option v-for="option in orderRadiusOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+            </label>
+            <button class="refresh-action" type="button" :disabled="orderLoading" @click="loadOrders"><LoaderCircle v-if="orderLoading" class="spin" :size="16" /><RefreshCw v-else :size="16" />刷新订单</button>
+          </div>
         </header>
         <div v-if="availableOrders.length" class="order-list large">
           <article v-for="order in availableOrders" :key="orderId(order)" class="order-row">
@@ -614,8 +840,31 @@ onBeforeUnmount(() => window.clearInterval(detailTimer))
 .quiet-action { width: 100%; min-height: 39px; justify-content: center; gap: 8px; margin-top: 19px; border: 1px solid #d7d2c6; border-radius: 4px; color: #59635d; background: #f6f3ec; font-size: 10px; }
 .orders-panel { margin-top: 20px; padding: 22px; }
 .orders-panel.full-panel { margin-top: 0; padding: clamp(22px, 3vw, 32px); }
+.sim-location-panel { margin-top: 20px; padding: 22px; background: #fffdf8; border: 1px dashed #c9b98f; border-radius: 7px; }
+.sim-location-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.sim-location-heading h2 { margin: 0; font-size: 18px; font-weight: 650; }
+.sim-location-badge { flex: none; padding: 6px 9px; color: #7a4e11; background: #f5e6ca; border: 1px solid #e2c58f; border-radius: 4px; font-size: 9px; font-weight: 650; }
+.sim-location-hint { margin: 8px 0 16px; color: #8b928d; font-size: 10px; line-height: 1.7; }
+.sim-location-form { display: grid; grid-template-columns: minmax(180px, 1.2fr) minmax(120px, .8fr) minmax(120px, .8fr) auto; gap: 12px; align-items: end; }
+.sim-location-field { display: grid; gap: 6px; min-width: 0; }
+.sim-location-field > span { color: #8b928d; font-size: 9px; }
+.sim-location-field select, .sim-location-field input { width: 100%; min-height: 38px; padding: 0 10px; color: #343e39; background: #fbf9f3; border: 1px solid #d8d3c8; border-radius: 4px; font-size: 11px; }
+.sim-location-field select:focus, .sim-location-field input:focus { outline: 2px solid #b8d8ca; outline-offset: 1px; }
+.sim-location-field input[readonly] { color: #6b746e; background: #f1eee7; cursor: default; }
+.sim-location-submit { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 16px; color: #fff; background: #247055; border-radius: 4px; font-size: 10px; font-weight: 650; }
+.sim-location-submit:disabled { opacity: .55; cursor: not-allowed; }
+.sim-location-footer { display: flex; align-items: center; gap: 14px; margin-top: 14px; flex-wrap: wrap; }
+.sim-location-follow { width: auto; min-height: 36px; margin-top: 0; padding: 0 14px; }
+.sim-location-message { font-size: 10px; }
+.sim-location-message.success { color: #247055; }
+.sim-location-message.error { color: #a63d34; }
+.sim-location-tip { color: #9a9489; font-size: 9px; }
 .orders-heading { justify-content: space-between; gap: 18px; }
 .orders-heading p { margin: 7px 0 0; color: #8b928d; font-size: 10px; }
+.orders-heading-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+.distance-filter { min-height: 34px; display: flex; align-items: center; gap: 6px; padding: 0 9px; border: 1px solid #d8d3c8; border-radius: 4px; color: #606963; background: #f5f2eb; font-size: 9px; }
+.distance-filter select { border: 0; outline: none; color: #343e39; background: transparent; font-size: 10px; font-weight: 650; cursor: pointer; }
+.distance-filter select:disabled { cursor: wait; opacity: .65; }
 .icon-action { width: 34px; height: 34px; justify-content: center; border: 1px solid #d8d3c8; border-radius: 4px; color: #68716c; background: #f5f2eb; }
 .order-list { margin-top: 18px; border-top: 1px solid #e4dfd5; }
 .order-row { gap: 13px; min-height: 71px; padding: 12px 0; border-bottom: 1px solid #e4dfd5; }
@@ -760,9 +1009,11 @@ onBeforeUnmount(() => window.clearInterval(detailTimer))
   .driver-account-card { align-items: flex-start; flex-wrap: wrap; }
   .driver-verified { margin-left: auto; }
   .driver-notice { top: 72px; right: 12px; left: 12px; max-width: none; }
+  .sim-location-form { grid-template-columns: 1fr; }
+  .sim-location-submit { width: 100%; }
 }
 
 @media (max-width: 480px) {
-  .duty-panel, .driver-side-panel, .orders-panel, .vehicle-profile, .qualification-panel, .driver-account-card, .trip-route-panel, .trip-contact-panel, .trip-action-panel { padding: 18px 15px; }
+  .duty-panel, .driver-side-panel, .orders-panel, .sim-location-panel, .vehicle-profile, .qualification-panel, .driver-account-card, .trip-route-panel, .trip-contact-panel, .trip-action-panel { padding: 18px 15px; }
 }
 </style>

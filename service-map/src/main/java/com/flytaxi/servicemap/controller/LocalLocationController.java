@@ -7,6 +7,7 @@ import com.flytaxi.internalCommon.response.TerminalResponse;
 import com.flytaxi.internalCommon.response.TrsearchResponse;
 import com.flytaxi.servicemap.service.LocalLocationService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -29,6 +30,11 @@ public class LocalLocationController {
     @PostMapping("/around")
     public ResponseResult<List<TerminalResponse>> around(@RequestParam String center, @RequestParam Integer radius) {
         return locations.around(center, radius);
+    }
+
+    @GetMapping("/position")
+    public ResponseResult<TerminalResponse> position(@RequestParam Long carId) {
+        return locations.position(carId);
     }
 
     @PostMapping("/trip")

@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ArrowRight, ClipboardList, LogIn, MapPin, RefreshCw, X } from 'lucide-vue-next'
 import { driverApi, getToken } from '../services/api'
+import { subscribeSse } from '../services/sse'
 
 const props = defineProps({ authenticated: Boolean })
 const emit = defineEmits(['login', 'activity', 'auth-expired'])
@@ -14,6 +15,7 @@ const error = ref('')
 let requestVersion = 0
 let disposed = false
 let refreshTimer
+let unsubscribeSse
 
 const statuses = {
   0: '已失效', 1: '待派单', 2: '待接驾', 3: '接驾中', 4: '已到达', 5: '行程中',
@@ -127,12 +129,21 @@ watch(() => props.authenticated, authenticated => {
     window.clearInterval(refreshTimer)
     refreshTimer = undefined
   }
-  if (authenticated) refreshTimer = window.setInterval(loadOrders, 5000)
+  if (unsubscribeSse) {
+    unsubscribeSse()
+    unsubscribeSse = undefined
+  }
+  if (authenticated) {
+    // SSE carries new orders and status changes; polling stays as a slow fallback.
+    refreshTimer = window.setInterval(loadOrders, 30000)
+    unsubscribeSse = subscribeSse('driver', () => loadOrders())
+  }
 }, { immediate: true })
 onBeforeUnmount(() => {
   disposed = true
   requestVersion += 1
   if (refreshTimer) window.clearInterval(refreshTimer)
+  if (unsubscribeSse) unsubscribeSse()
 })
 </script>
 

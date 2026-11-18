@@ -114,6 +114,29 @@ public class LocalLocationService {
         }
     }
 
+    public ResponseResult<TerminalResponse> position(Long carId) {
+        if (!localSimulation) return ResponseResult.fail(0, "本地模拟定位未启用");
+        if (carId == null || carId <= 0) return ResponseResult.fail(0, "请提供有效的车辆");
+        try {
+            List<Point> points = redis.opsForGeo().position(POSITIONS, carId.toString());
+            Double updatedAt = redis.opsForZSet().score(UPDATED, carId.toString());
+            long now = clock.millis();
+            if (points == null || points.isEmpty() || points.get(0) == null
+                    || updatedAt == null || updatedAt < now - ttlSeconds * 1000
+                    || updatedAt > now + 60000) {
+                return ResponseResult.fail(1700, "司机当前位置不可用，请先上报定位");
+            }
+            Point point = points.get(0);
+            TerminalResponse vehicle = new TerminalResponse();
+            vehicle.setCarId(carId);
+            vehicle.setLongitude(Double.toString(point.getX()));
+            vehicle.setLatitude(Double.toString(point.getY()));
+            return ResponseResult.success(vehicle);
+        } catch (DataAccessException exception) {
+            return unavailable();
+        }
+    }
+
     public ResponseResult<TrsearchResponse> trip(PredictPriceDTO route) {
         if (!localSimulation) return ResponseResult.fail(0, "本地模拟定位未启用");
         try {

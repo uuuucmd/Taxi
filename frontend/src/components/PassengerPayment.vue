@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { CheckCircle2, Clock3, CreditCard, LogIn, MapPin, RefreshCw, Route, WalletCards } from 'lucide-vue-next'
 import { getToken, passengerApi } from '../services/api'
+import { subscribeSse } from '../services/sse'
 
 const props = defineProps({
   authenticated: Boolean,
@@ -16,6 +17,7 @@ const paying = ref(false)
 const error = ref('')
 const paidLocally = ref(false)
 let refreshTimer
+let unsubscribeSse
 
 const statusLabels = {
   1: '等待派单',
@@ -99,15 +101,31 @@ watch(() => [props.authenticated, props.active], ([authenticated, active]) => {
   }
   if (authenticated && active) {
     loadOrder()
-    refreshTimer = window.setInterval(loadOrder, 5000)
+    // SSE delivers pay/status changes immediately; polling remains a slow fallback.
+    refreshTimer = window.setInterval(loadOrder, 30000)
   } else if (!authenticated) {
     order.value = null
     paidLocally.value = false
   }
 }, { immediate: true })
 
+watch(() => props.authenticated, authenticated => {
+  if (unsubscribeSse) {
+    unsubscribeSse()
+    unsubscribeSse = undefined
+  }
+  if (authenticated) {
+    unsubscribeSse = subscribeSse('passenger', event => {
+      if (['order.status', 'order.cancelled', 'order.paid', 'pay.info'].includes(event.type)) {
+        loadOrder()
+      }
+    })
+  }
+}, { immediate: true })
+
 onBeforeUnmount(() => {
   if (refreshTimer) window.clearInterval(refreshTimer)
+  if (unsubscribeSse) unsubscribeSse()
 })
 </script>
 

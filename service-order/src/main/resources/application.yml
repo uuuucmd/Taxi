@@ -58,6 +58,9 @@ feign:
       finalizationPriceClient:
         connectTimeout: "${ORDER_FINALIZATION_PRICE_CONNECT_TIMEOUT_MS:2000}"
         readTimeout: "${ORDER_FINALIZATION_PRICE_READ_TIMEOUT_MS:10000}"
+      service-sse-push:
+        connectTimeout: "${SSE_PUSH_CONNECT_TIMEOUT_MS:500}"
+        readTimeout: "${SSE_PUSH_READ_TIMEOUT_MS:1000}"
 
 logging:
   level:
